@@ -11,7 +11,7 @@ on:
         description: 'Install VS Code'
         required: false
         type: boolean
-        default: true
+        default: false
       install_nodejs:
         description: 'Install Node.js (LTS)'
         required: false
@@ -104,6 +104,36 @@ on:
         default: false
       install_winscp:
         description: 'Install WinSCP (SFTP Client)'
+        required: false
+        type: boolean
+        default: false
+      install_chrome:
+        description: 'Install Google Chrome'
+        required: false
+        type: boolean
+        default: false
+      install_wsl:
+        description: 'Install WSL2 + Ubuntu'
+        required: false
+        type: boolean
+        default: false
+      install_docker:
+        description: 'Install Docker Desktop'
+        required: false
+        type: boolean
+        default: false
+      install_directx:
+        description: 'Install DirectX + VC++ Redistributable'
+        required: false
+        type: boolean
+        default: false
+      install_store:
+        description: 'Install Microsoft Store'
+        required: false
+        type: boolean
+        default: false
+      uninstall_edge:
+        description: 'Uninstall Microsoft Edge'
         required: false
         type: boolean
         default: false
@@ -711,6 +741,7 @@ jobs:
           Write-Host "============================================="
 
       - name: Install WSL2
+        if: ${{ inputs.install_wsl == true }}
         continue-on-error: true
         run: |
           try {
@@ -727,6 +758,7 @@ jobs:
           wsl --status
 
       - name: Install Google Chrome
+        if: ${{ inputs.install_chrome == true }}
         continue-on-error: true
         run: |
           winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements
@@ -734,6 +766,7 @@ jobs:
           exit 0
 
       - name: Uninstall Microsoft Edge
+        if: ${{ inputs.uninstall_edge == true }}
         shell: pwsh
         continue-on-error: true
         run: |
@@ -833,6 +866,7 @@ jobs:
           exit 0
 
       - name: Install Docker Desktop
+        if: ${{ inputs.install_docker == true }}
         continue-on-error: true
         run: |
           winget install --id Docker.DockerDesktop --silent --accept-package-agreements --accept-source-agreements
@@ -857,6 +891,7 @@ jobs:
           exit 0
 
       - name: Install DirectX Runtime
+        if: ${{ inputs.install_directx == true }}
         continue-on-error: true
         run: |
           winget install --id Microsoft.DirectX --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
@@ -866,6 +901,7 @@ jobs:
           exit 0
 
       - name: Install Microsoft Store
+        if: ${{ inputs.install_store == true }}
         continue-on-error: true
         run: |
           Write-Host "=== Enabling Microsoft Store ==="

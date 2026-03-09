@@ -83,7 +83,7 @@ All software is installed via `winget`. Default is **off** unless noted.
 
 | Software | Winget ID | Default |
 |----------|-----------|---------|
-| VS Code | `Microsoft.VisualStudioCode` | ✅ On |
+| VS Code | `Microsoft.VisualStudioCode` | Off |
 | Node.js LTS | `OpenJS.NodeJS.LTS` | Off |
 | Python 3.13 | `Python.Python.3.13` | Off |
 | Git | `Git.Git` | Off |
@@ -105,13 +105,9 @@ All software is installed via `winget`. Default is **off** unless noted.
 | WinSCP | `WinSCP.WinSCP` | Off |
 
 ### 🌐 Always Installed (No Toggle)
-- **Google Chrome** (replaces Edge)
-- **Docker Desktop**
-- **DirectX Runtime** + VC++ Redistributable
-- **Microsoft Store** (re-enabled + services activated)
-- **WSL2** with Ubuntu
-- **Tailscale** VPN
-- **Microsoft Edge** is force-uninstalled
+- **Tailscale** VPN (required for RDP connection)
+
+All other software (Chrome, Docker, WSL2, DirectX, Microsoft Store, Edge uninstall) is **toggle-based** — enable only what you need.
 
 ### 🔐 Security
 - RDP user created with **16-character random password** (uppercase + lowercase + digits + special)
@@ -167,6 +163,12 @@ All software is installed via `winget`. Default is **off** unless noted.
 | `install_sublimetext` | Install Sublime Text | `false` |
 | `install_filezilla` | Install FileZilla (FTP Client) | `false` |
 | `install_winscp` | Install WinSCP (SFTP Client) | `false` |
+| `install_chrome` | Install Google Chrome | `false` |
+| `install_wsl` | Install WSL2 + Ubuntu | `false` |
+| `install_docker` | Install Docker Desktop | `false` |
+| `install_directx` | Install DirectX + VC++ Redist | `false` |
+| `install_store` | Install Microsoft Store | `false` |
+| `uninstall_edge` | Uninstall Microsoft Edge | `false` |
 
 ## 🖥️ Runner Specs (GitHub Actions `windows-latest`)
 
