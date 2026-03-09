@@ -14,12 +14,35 @@ Create a free Windows remote desktop via GitHub Actions, connected through Tails
 
 ## ⚙️ Workflow Features
 
-### 🔧 Performance Optimization
+### 🧠 RAM Optimization (Aggressive)
+- **Windows Defender** fully disabled (real-time, scripts, IOAV, behavior monitoring, services stopped)
+- **42 services** disabled — Xbox, Fax, SmartCard, BITS, Windows Update, Diagnostics, Print Spooler, etc.
+- **19 background processes** killed — SearchIndexer, OneDrive, RuntimeBroker, GameBar, etc.
+- **Memory compression** disabled — use raw RAM directly
+- **Prefetch/Superfetch** disabled via registry
+- **Pagefile** auto-configured to 1.5x–3x RAM using CIM cmdlets
+- **Cortana**, Notifications, Tips disabled
+- **DisablePagingExecutive=1** — keep kernel in RAM for faster response
+- **LargeSystemCache=0** — prioritize apps over system cache
+
+### 💾 Disk Optimization (7-Phase Aggressive Cleanup)
+
+| Phase | Action | Space Saved |
+|-------|--------|-------------|
+| 1 | Temp files (Windows, user, prefetch, logs, debug) | ~500MB–1GB |
+| 2 | GitHub runner bloat (35 folders: CodeQL, Go, Ruby, Java, Rust, MongoDB, MySQL, Chocolatey, etc.) | ~5–15GB |
+| 3 | Appx bloatware (26 apps: Xbox, Skype, Maps, Teams, Clipchamp, etc.) | ~500MB |
+| 4 | Windows component cleanup (DISM ResetBase + SPSuperseded) | ~1–2GB |
+| 5 | Windows caches (WER, FontCache, INetCache, CrashDumps, thumbnails) | ~200–500MB |
+| 6 | Disable hibernation (`powercfg /h off`) | ~3–4GB |
+| 7 | Compact OS (`compact /CompactOS:always`) | ~2–3GB |
+
+**Total estimated: 12–25 GB recovered**
+
+### 🔧 Performance
 - **High Performance** power plan enabled
-- **Windows Defender** real-time scanning disabled (saves CPU/RAM)
-- 8 unnecessary services disabled (DiagTrack, SysMain, WSearch, etc.)
 - Game Bar/DVR and Error Reporting disabled
-- Disk cleanup (temp files, DISM component cleanup)
+- Visual effects set to best performance
 
 ### 🖥️ RDP Configuration
 - Clipboard, drive, printer, and audio redirection enabled
@@ -32,17 +55,27 @@ Create a free Windows remote desktop via GitHub Actions, connected through Tails
 ### 🎮 GPU Detection & Optimization
 - Auto-detects **NVIDIA / AMD / Intel** dedicated GPU
 - Applies hardware-accelerated encoding for real GPUs
-- Falls back to virtual GPU with software rendering
+- Falls back to **WARP software renderer** for virtual GPUs
 - Forces GPU visibility in **Task Manager** Performance tab
 - DWM desktop composition enabled
 
-### 🔄 Driver Updates
-- **GPU**: Auto-installs NVIDIA GeForce / AMD Adrenalin / Intel Graphics driver
-- **Network**: Detects Intel/Realtek NICs → installs latest Ethernet & WiFi drivers
-- **Audio**: Realtek audio driver auto-detection
-- **Chipset**: Intel Chipset INF update
-- **All others**: Scans Windows Update for remaining driver updates
-- Displays driver version summary after completion
+### 🔄 Smart Driver Updates
+Auto-detects hardware and installs matching drivers only:
+
+| Component | Detection | Driver |
+|-----------|-----------|--------|
+| **GPU** | NVIDIA / AMD / Intel | GeForce Experience / Adrenalin / Intel Graphics |
+| **GPU (virtual)** | Hyper-V Video | WARP renderer enabled |
+| **Network** | Intel NIC | Intel Ethernet + WiFi driver |
+| **Network** | Realtek NIC | Realtek Ethernet driver |
+| **Network** | Mellanox / Hyper-V | Virtual adapter — inbox driver |
+| **Chipset** | Intel CPU | Intel Chipset INF |
+| **Chipset** | AMD CPU (EPYC, Ryzen) | AMD Chipset Software |
+| **Audio** | Realtek | Realtek Audio driver |
+| **Audio** | None (VM) | Skipped |
+| **All others** | Windows Update scan | Auto-download & install |
+
+All winget commands use `--source winget` to avoid Microsoft Store agreement prompts.
 
 ### 📦 Software (Toggle On/Off)
 
@@ -57,17 +90,17 @@ All software is installed via `winget`. Default is **off** unless noted.
 | 7-Zip | `7zip.7zip` | Off |
 | Notepad++ | `Notepad++.Notepad++` | Off |
 | Java JDK 21 | `Oracle.JDK.21` | Off |
-| Docker Desktop | `Docker.DockerDesktop` | ✅ Always |
-| DirectX Runtime | `Microsoft.DirectX` + VC++ Redist | ✅ Always |
-| Microsoft Store | Windows AppX | ✅ Always |
 | .NET 8 Runtime | `Microsoft.DotNet.Runtime.8` | Off |
 | WinRAR | `RARLab.WinRAR` | Off |
 | VLC | `VideoLAN.VLC` | Off |
 | Firefox | `Mozilla.Firefox` | Off |
 | Telegram | `Telegram.TelegramDesktop` | Off |
 
-### 🌐 Pre-installed (Always)
+### 🌐 Always Installed (No Toggle)
 - **Google Chrome** (replaces Edge)
+- **Docker Desktop**
+- **DirectX Runtime** + VC++ Redistributable
+- **Microsoft Store** (re-enabled + services activated)
 - **WSL2** with Ubuntu
 - **Tailscale** VPN
 - **Microsoft Edge** is force-uninstalled
@@ -113,14 +146,22 @@ All software is installed via `winget`. Default is **off** unless noted.
 | `install_7zip` | Install 7-Zip | `false` |
 | `install_notepadpp` | Install Notepad++ | `false` |
 | `install_java` | Install Java JDK 21 | `false` |
-| _(Docker Desktop)_ | _Always installed_ | _N/A_ |
-| _(DirectX Runtime)_ | _Always installed_ | _N/A_ |
-| _(Microsoft Store)_ | _Always installed_ | _N/A_ |
 | `install_dotnet` | Install .NET 8 Runtime | `false` |
 | `install_winrar` | Install WinRAR | `false` |
 | `install_vlc` | Install VLC | `false` |
 | `install_firefox` | Install Firefox | `false` |
 | `install_telegram` | Install Telegram Desktop | `false` |
+
+## 🖥️ Runner Specs (GitHub Actions `windows-latest`)
+
+| Spec | Value |
+|------|-------|
+| OS | Windows Server 2025 Datacenter |
+| CPU | AMD EPYC 7763 — 2 cores / 4 threads |
+| RAM | 16 GB |
+| Disk | ~150 GB (80–100 GB free after cleanup) |
+| GPU | Hyper-V Video (virtual) |
+| Network | Mellanox ConnectX-4 Lx + Hyper-V adapter |
 
 ## 💡 Tips
 
