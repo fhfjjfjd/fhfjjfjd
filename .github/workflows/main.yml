@@ -731,6 +731,7 @@ jobs:
         run: |
           winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Chrome installed"
+          exit 0
 
       - name: Uninstall Microsoft Edge
         shell: pwsh
@@ -781,6 +782,7 @@ jobs:
         run: |
           winget install --id Microsoft.VisualStudioCode --silent --accept-package-agreements --accept-source-agreements
           Write-Host "VS Code installed"
+          exit 0
 
       - name: Install Node.js
         if: ${{ inputs.install_nodejs == true }}
@@ -788,6 +790,7 @@ jobs:
         run: |
           winget install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Node.js installed"
+          exit 0
 
       - name: Install Python
         if: ${{ inputs.install_python == true }}
@@ -795,6 +798,7 @@ jobs:
         run: |
           winget install --id Python.Python.3.13 --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Python installed"
+          exit 0
 
       - name: Install Git
         if: ${{ inputs.install_git == true }}
@@ -802,6 +806,7 @@ jobs:
         run: |
           winget install --id Git.Git --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Git installed"
+          exit 0
 
       - name: Install 7-Zip
         if: ${{ inputs.install_7zip == true }}
@@ -809,6 +814,7 @@ jobs:
         run: |
           winget install --id 7zip.7zip --silent --accept-package-agreements --accept-source-agreements
           Write-Host "7-Zip installed"
+          exit 0
 
       - name: Install Notepad++
         if: ${{ inputs.install_notepadpp == true }}
@@ -816,6 +822,7 @@ jobs:
         run: |
           winget install --id Notepad++.Notepad++ --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Notepad++ installed"
+          exit 0
 
       - name: Install Java (JDK 21)
         if: ${{ inputs.install_java == true }}
@@ -823,12 +830,14 @@ jobs:
         run: |
           winget install --id Oracle.JDK.21 --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Java JDK 21 installed"
+          exit 0
 
       - name: Install Docker Desktop
         continue-on-error: true
         run: |
           winget install --id Docker.DockerDesktop --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Docker Desktop installed"
+          exit 0
 
       - name: Install .NET 8 Runtime
         if: ${{ inputs.install_dotnet == true }}
@@ -837,6 +846,7 @@ jobs:
           winget install --id Microsoft.DotNet.Runtime.8 --silent --accept-package-agreements --accept-source-agreements
           winget install --id Microsoft.DotNet.DesktopRuntime.8 --silent --accept-package-agreements --accept-source-agreements
           Write-Host ".NET 8 Runtime installed"
+          exit 0
 
       - name: Install WinRAR
         if: ${{ inputs.install_winrar == true }}
@@ -844,6 +854,7 @@ jobs:
         run: |
           winget install --id RARLab.WinRAR --silent --accept-package-agreements --accept-source-agreements
           Write-Host "WinRAR installed"
+          exit 0
 
       - name: Install DirectX Runtime
         continue-on-error: true
@@ -852,6 +863,7 @@ jobs:
           # Fallback: Microsoft Visual C++ Redistributable (required by many DirectX apps)
           winget install --id Microsoft.VCRedist.2015+.x64 --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           Write-Host "DirectX Runtime + VC++ Redistributable installed"
+          exit 0
 
       - name: Install Microsoft Store
         continue-on-error: true
@@ -914,6 +926,7 @@ jobs:
         run: |
           winget install --id VideoLAN.VLC --silent --accept-package-agreements --accept-source-agreements
           Write-Host "VLC installed"
+          exit 0
 
       - name: Install Firefox
         if: ${{ inputs.install_firefox == true }}
@@ -921,6 +934,7 @@ jobs:
         run: |
           winget install --id Mozilla.Firefox --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Firefox installed"
+          exit 0
 
       - name: Install Telegram Desktop
         if: ${{ inputs.install_telegram == true }}
@@ -928,6 +942,7 @@ jobs:
         run: |
           winget install --id Telegram.TelegramDesktop --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Telegram Desktop installed"
+          exit 0
 
       - name: Install OBS Studio
         if: ${{ inputs.install_obs == true }}
@@ -935,6 +950,7 @@ jobs:
         run: |
           winget install --id OBSProject.OBSStudio --source winget --silent --accept-package-agreements --accept-source-agreements
           Write-Host "OBS Studio installed"
+          exit 0
 
       - name: Install PuTTY
         if: ${{ inputs.install_putty == true }}
@@ -942,6 +958,7 @@ jobs:
         run: |
           winget install --id PuTTY.PuTTY --source winget --silent --accept-package-agreements --accept-source-agreements
           Write-Host "PuTTY installed"
+          exit 0
 
       - name: Install Postman
         if: ${{ inputs.install_postman == true }}
@@ -949,6 +966,7 @@ jobs:
         run: |
           winget install --id Postman.Postman --source winget --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Postman installed"
+          exit 0
 
       - name: Install Discord
         if: ${{ inputs.install_discord == true }}
@@ -956,6 +974,7 @@ jobs:
         run: |
           winget install --id Discord.Discord --source winget --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Discord installed"
+          exit 0
 
       - name: Install Steam
         if: ${{ inputs.install_steam == true }}
@@ -963,6 +982,7 @@ jobs:
         run: |
           winget install --id Valve.Steam --source winget --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Steam installed"
+          exit 0
 
       - name: Install Sublime Text
         if: ${{ inputs.install_sublimetext == true }}
@@ -970,6 +990,7 @@ jobs:
         run: |
           winget install --id SublimeHQ.SublimeText.4 --source winget --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Sublime Text installed"
+          exit 0
 
       - name: Install FileZilla
         if: ${{ inputs.install_filezilla == true }}
@@ -977,6 +998,7 @@ jobs:
         run: |
           winget install --id TimKosse.FileZilla.Client --source winget --silent --accept-package-agreements --accept-source-agreements
           Write-Host "FileZilla installed"
+          exit 0
 
       - name: Install WinSCP
         if: ${{ inputs.install_winscp == true }}
@@ -984,6 +1006,7 @@ jobs:
         run: |
           winget install --id WinSCP.WinSCP --source winget --silent --accept-package-agreements --accept-source-agreements
           Write-Host "WinSCP installed"
+          exit 0
 
       - name: Create RDP User
         run: |
