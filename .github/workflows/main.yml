@@ -470,6 +470,155 @@ jobs:
           Write-Host "  Space recovered:  +${diskSaved} GB"
           Write-Host "============================================="
 
+      - name: Install OpenGL (Mesa3D) & Video Optimization
+        continue-on-error: true
+        run: |
+          Write-Host "============================================="
+          Write-Host "     OPENGL + VIDEO OPTIMIZATION"
+          Write-Host "============================================="
+
+          # === 1. Install Mesa3D (Software OpenGL for virtual GPU) ===
+          Write-Host ""
+          Write-Host ">>> [1/4] Installing Mesa3D OpenGL..."
+          $mesaVersion = "24.3.4"
+          $mesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/$mesaVersion/mesa3d-$mesaVersion-release-msvc.7z"
+          $mesaFallback = "https://github.com/AugFJTan/mesa-dist-win-prebuilt/releases/latest/download/mesa3d-release-msvc-x64.7z"
+
+          # Download Mesa3D
+          $downloaded = $false
+          foreach ($url in @($mesaUrl, $mesaFallback)) {
+              try {
+                  Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\mesa3d.7z" -UseBasicParsing -ErrorAction Stop
+                  $downloaded = $true
+                  Write-Host "  Downloaded Mesa3D from: $url"
+                  break
+              } catch {
+                  Write-Host "  Failed: $url — trying next..."
+              }
+          }
+
+          if ($downloaded) {
+              # Extract Mesa3D
+              if (Get-Command 7z -ErrorAction SilentlyContinue) {
+                  $extractPath = "$env:TEMP\mesa3d"
+                  7z x "$env:TEMP\mesa3d.7z" -o"$extractPath" -y 2>$null
+
+                  # Copy OpenGL DLLs to System32 (64-bit)
+                  $dllFiles = @("opengl32.dll", "libgallium_wgl.dll", "libglapi.dll", "osmesa.dll")
+                  foreach ($dll in $dllFiles) {
+                      $src = Get-ChildItem -Path $extractPath -Filter $dll -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.DirectoryName -match "x64" } | Select-Object -First 1
+                      if ($src) {
+                          Copy-Item -Path $src.FullName -Destination "$env:SystemRoot\System32\$dll" -Force -ErrorAction SilentlyContinue
+                          Write-Host "  Installed: $dll → System32"
+                      }
+                  }
+
+                  # Copy 32-bit DLLs to SysWOW64
+                  foreach ($dll in $dllFiles) {
+                      $src32 = Get-ChildItem -Path $extractPath -Filter $dll -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.DirectoryName -match "x86" } | Select-Object -First 1
+                      if ($src32) {
+                          Copy-Item -Path $src32.FullName -Destination "$env:SystemRoot\SysWOW64\$dll" -Force -ErrorAction SilentlyContinue
+                      }
+                  }
+
+                  Remove-Item -Path $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+                  Write-Host "  Mesa3D OpenGL installed (64-bit + 32-bit)"
+              } else {
+                  Write-Host "  7z not found — installing 7-Zip first..."
+                  winget install --id 7zip.7zip --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+                  $env:PATH += ";C:\Program Files\7-Zip"
+                  7z x "$env:TEMP\mesa3d.7z" -o"$env:SystemRoot\System32" -y opengl32.dll 2>$null
+                  Write-Host "  Mesa3D OpenGL installed (basic)"
+              }
+              Remove-Item "$env:TEMP\mesa3d.7z" -Force -ErrorAction SilentlyContinue
+          }
+
+          # === 2. OpenGL / DirectX Registry Optimization ===
+          Write-Host ""
+          Write-Host ">>> [2/4] OpenGL & DirectX registry optimization..."
+
+          # Force WARP software renderer (high quality software GPU)
+          reg add "HKLM\SOFTWARE\Microsoft\DirectX" /v "ForceWARP" /t REG_DWORD /d 1 /f
+
+          # Enable OpenGL ICD (Installable Client Driver)
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL" `
+            /v "DLL" /t REG_SZ /d "opengl32.dll" /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL" `
+            /v "DriverVersion" /t REG_DWORD /d 2 /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL" `
+            /v "Flags" /t REG_DWORD /d 1 /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL" `
+            /v "Version" /t REG_DWORD /d 2 /f
+
+          # Force GPU scheduling for video
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" `
+            /v "HwSchMode" /t REG_DWORD /d 2 /f
+
+          Write-Host "  OpenGL ICD registered + DirectX WARP enabled"
+
+          # === 3. Video Playback & Streaming Optimization ===
+          Write-Host ""
+          Write-Host ">>> [3/4] Video playback optimization..."
+
+          # Enable hardware-accelerated video processing
+          $tsPolicy = "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          reg add "$tsPolicy" /v "fEnableVirtualizedGraphics" /t REG_DWORD /d 1 /f
+          reg add "$tsPolicy" /v "AVC444ModePreferred" /t REG_DWORD /d 1 /f
+          reg add "$tsPolicy" /v "MaxFrameRate" /t REG_DWORD /d 60 /f
+          reg add "$tsPolicy" /v "ImageQuality" /t REG_DWORD /d 3 /f
+
+          # RDP video optimized mode
+          reg add "$tsPolicy" /v "VideoPlaybackPolicy" /t REG_DWORD /d 1 /f
+          reg add "$tsPolicy" /v "fEnableVideoPlaybackOptimization" /t REG_DWORD /d 1 /f
+
+          # Enable Media Foundation for hardware decoding
+          reg add "HKLM\SOFTWARE\Microsoft\Windows Media Foundation" `
+            /v "EnableFrameServerMode" /t REG_DWORD /d 1 /f
+
+          # Optimize DirectShow / Media Foundation pipeline
+          reg add "HKCU\Software\Microsoft\DirectX\UserGpuPreferences" `
+            /v "DirectXUserGlobalSettings" /t REG_SZ /d "VRROptimizeEnable=0;SwapEffectUpgradeEnable=1;" /f
+
+          # Enable smooth video streaming over RDP
+          reg add "$tsPolicy" /v "UseHardwareGpuScheduler" /t REG_DWORD /d 1 /f
+          reg add "$tsPolicy" /v "bEnumerateHWBeforeSW" /t REG_DWORD /d 0 /f
+
+          # Multimedia scheduling for video priority
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" `
+            /v "NetworkThrottlingIndex" /t REG_DWORD /d 0xffffffff /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" `
+            /v "SystemResponsiveness" /t REG_DWORD /d 0 /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback" `
+            /v "Priority" /t REG_DWORD /d 6 /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback" `
+            /v "Scheduling Category" /t REG_SZ /d "High" /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback" `
+            /v "SFIO Priority" /t REG_SZ /d "High" /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback" `
+            /v "GPU Priority" /t REG_DWORD /d 8 /f
+
+          # Disable network throttling for video streaming
+          reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" `
+            /v "DisableBandwidthThrottling" /t REG_DWORD /d 1 /f
+          reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" `
+            /v "DisableLargeMtu" /t REG_DWORD /d 0 /f
+
+          Write-Host "  Video playback optimized: 60fps, AVC444, Media Foundation, no network throttling"
+
+          # === 4. Install K-Lite Codec Pack (all video formats) ===
+          Write-Host ""
+          Write-Host ">>> [4/4] Installing K-Lite Codec Pack..."
+          winget install --id CodecGuide.K-LiteCodecPack.Full --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+          Write-Host "  K-Lite Codec Pack installed (H.264, H.265, VP9, AV1, AAC, etc.)"
+
+          Write-Host ""
+          Write-Host "============================================="
+          Write-Host "  OpenGL: Mesa3D software renderer"
+          Write-Host "  Video:  60fps, AVC444, K-Lite codecs"
+          Write-Host "  Network: Throttling disabled"
+          Write-Host "  Multimedia: High priority scheduling"
+          Write-Host "============================================="
+
       - name: Configure RDP
         run: |
           $tsPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server'

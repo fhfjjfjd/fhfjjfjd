@@ -39,6 +39,16 @@ Create a free Windows remote desktop via GitHub Actions, connected through Tails
 
 **Total estimated: 12–25 GB recovered**
 
+### 🎨 OpenGL & Video Optimization
+- **Mesa3D** OpenGL software renderer installed (64-bit + 32-bit DLLs)
+- OpenGL ICD registered in Windows registry
+- **WARP** DirectX software renderer enabled
+- **K-Lite Codec Pack Full** — H.264, H.265/HEVC, VP9, AV1, AAC, etc.
+- **RDP video optimization** — VideoPlaybackPolicy, Media Foundation frame server
+- **Multimedia scheduling** — video playback set to High priority (GPU Priority=8)
+- **Network throttling disabled** — no bandwidth limits for video streaming
+- AVC444 mode at 60fps for smooth RDP video playback
+
 ### 🔧 Performance
 - **High Performance** power plan enabled
 - Game Bar/DVR and Error Reporting disabled
