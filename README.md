@@ -95,6 +95,14 @@ All software is installed via `winget`. Default is **off** unless noted.
 | VLC | `VideoLAN.VLC` | Off |
 | Firefox | `Mozilla.Firefox` | Off |
 | Telegram | `Telegram.TelegramDesktop` | Off |
+| OBS Studio | `OBSProject.OBSStudio` | Off |
+| PuTTY | `PuTTY.PuTTY` | Off |
+| Postman | `Postman.Postman` | Off |
+| Discord | `Discord.Discord` | Off |
+| Steam | `Valve.Steam` | Off |
+| Sublime Text | `SublimeHQ.SublimeText.4` | Off |
+| FileZilla | `TimKosse.FileZilla.Client` | Off |
+| WinSCP | `WinSCP.WinSCP` | Off |
 
 ### 🌐 Always Installed (No Toggle)
 - **Google Chrome** (replaces Edge)
@@ -151,6 +159,14 @@ All software is installed via `winget`. Default is **off** unless noted.
 | `install_vlc` | Install VLC | `false` |
 | `install_firefox` | Install Firefox | `false` |
 | `install_telegram` | Install Telegram Desktop | `false` |
+| `install_obs` | Install OBS Studio | `false` |
+| `install_putty` | Install PuTTY (SSH Client) | `false` |
+| `install_postman` | Install Postman (API Testing) | `false` |
+| `install_discord` | Install Discord | `false` |
+| `install_steam` | Install Steam | `false` |
+| `install_sublimetext` | Install Sublime Text | `false` |
+| `install_filezilla` | Install FileZilla (FTP Client) | `false` |
+| `install_winscp` | Install WinSCP (SFTP Client) | `false` |
 
 ## 🖥️ Runner Specs (GitHub Actions `windows-latest`)
 

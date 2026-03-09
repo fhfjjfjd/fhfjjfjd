@@ -67,6 +67,46 @@ on:
         required: false
         type: boolean
         default: false
+      install_obs:
+        description: 'Install OBS Studio'
+        required: false
+        type: boolean
+        default: false
+      install_putty:
+        description: 'Install PuTTY (SSH Client)'
+        required: false
+        type: boolean
+        default: false
+      install_postman:
+        description: 'Install Postman (API Testing)'
+        required: false
+        type: boolean
+        default: false
+      install_discord:
+        description: 'Install Discord'
+        required: false
+        type: boolean
+        default: false
+      install_steam:
+        description: 'Install Steam'
+        required: false
+        type: boolean
+        default: false
+      install_sublimetext:
+        description: 'Install Sublime Text'
+        required: false
+        type: boolean
+        default: false
+      install_filezilla:
+        description: 'Install FileZilla (FTP Client)'
+        required: false
+        type: boolean
+        default: false
+      install_winscp:
+        description: 'Install WinSCP (SFTP Client)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: rdp-session
@@ -888,6 +928,62 @@ jobs:
         run: |
           winget install --id Telegram.TelegramDesktop --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Telegram Desktop installed"
+
+      - name: Install OBS Studio
+        if: ${{ inputs.install_obs == true }}
+        continue-on-error: true
+        run: |
+          winget install --id OBSProject.OBSStudio --source winget --silent --accept-package-agreements --accept-source-agreements
+          Write-Host "OBS Studio installed"
+
+      - name: Install PuTTY
+        if: ${{ inputs.install_putty == true }}
+        continue-on-error: true
+        run: |
+          winget install --id PuTTY.PuTTY --source winget --silent --accept-package-agreements --accept-source-agreements
+          Write-Host "PuTTY installed"
+
+      - name: Install Postman
+        if: ${{ inputs.install_postman == true }}
+        continue-on-error: true
+        run: |
+          winget install --id Postman.Postman --source winget --silent --accept-package-agreements --accept-source-agreements
+          Write-Host "Postman installed"
+
+      - name: Install Discord
+        if: ${{ inputs.install_discord == true }}
+        continue-on-error: true
+        run: |
+          winget install --id Discord.Discord --source winget --silent --accept-package-agreements --accept-source-agreements
+          Write-Host "Discord installed"
+
+      - name: Install Steam
+        if: ${{ inputs.install_steam == true }}
+        continue-on-error: true
+        run: |
+          winget install --id Valve.Steam --source winget --silent --accept-package-agreements --accept-source-agreements
+          Write-Host "Steam installed"
+
+      - name: Install Sublime Text
+        if: ${{ inputs.install_sublimetext == true }}
+        continue-on-error: true
+        run: |
+          winget install --id SublimeHQ.SublimeText.4 --source winget --silent --accept-package-agreements --accept-source-agreements
+          Write-Host "Sublime Text installed"
+
+      - name: Install FileZilla
+        if: ${{ inputs.install_filezilla == true }}
+        continue-on-error: true
+        run: |
+          winget install --id TimKosse.FileZilla.Client --source winget --silent --accept-package-agreements --accept-source-agreements
+          Write-Host "FileZilla installed"
+
+      - name: Install WinSCP
+        if: ${{ inputs.install_winscp == true }}
+        continue-on-error: true
+        run: |
+          winget install --id WinSCP.WinSCP --source winget --silent --accept-package-agreements --accept-source-agreements
+          Write-Host "WinSCP installed"
 
       - name: Create RDP User
         run: |
