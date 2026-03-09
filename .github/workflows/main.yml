@@ -545,15 +545,15 @@ jobs:
 
           if ($nvidia) {
               Write-Host "  NVIDIA detected — installing driver..."
-              winget install --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null
+              winget install --id Nvidia.GeForceExperience --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           }
           if ($amd) {
               Write-Host "  AMD detected — installing driver..."
-              winget install --id AMD.AMDSoftwareAdrenalinEdition --silent --accept-package-agreements --accept-source-agreements 2>$null
+              winget install --id AMD.AMDSoftwareAdrenalinEdition --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           }
           if ($intel) {
               Write-Host "  Intel GPU detected — installing driver..."
-              winget install --id Intel.GraphicsDriver --silent --accept-package-agreements --accept-source-agreements 2>$null
+              winget install --id Intel.GraphicsDriver --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           }
           if (-not ($nvidia -or $amd -or $intel)) {
               Write-Host "  Virtual GPU only — enabling WARP software renderer"
@@ -570,30 +570,59 @@ jobs:
           $intelNic = $nics | Where-Object { $_.Name -match "Intel" }
           if ($intelNic) {
               Write-Host "  Intel NIC detected — installing driver..."
-              winget install --id Intel.EthernetAdapter --silent --accept-package-agreements --accept-source-agreements 2>$null
-              winget install --id Intel.WiFiDriver --silent --accept-package-agreements --accept-source-agreements 2>$null
+              winget install --id Intel.EthernetAdapter --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+              winget install --id Intel.WiFiDriver --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           }
 
           # Realtek Network Driver
           $realtekNic = $nics | Where-Object { $_.Name -match "Realtek" }
           if ($realtekNic) {
               Write-Host "  Realtek NIC detected — installing driver..."
-              winget install --id Realtek.EthernetController --silent --accept-package-agreements --accept-source-agreements 2>$null
+              winget install --id Realtek.EthernetController --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           }
 
-          # === 3. AUDIO / CHIPSET / OTHER via winget ===
+          # Mellanox / Virtual NIC
+          $mellanoxNic = $nics | Where-Object { $_.Name -match "Mellanox|ConnectX" }
+          if ($mellanoxNic) {
+              Write-Host "  Mellanox NIC detected — virtual adapter, no driver update needed"
+          }
+
+          # Hyper-V Network
+          $hypervNic = $nics | Where-Object { $_.Name -match "Hyper-V" }
+          if ($hypervNic) {
+              Write-Host "  Hyper-V virtual NIC detected — using inbox driver"
+          }
+
+          if (-not ($intelNic -or $realtekNic -or $mellanoxNic -or $hypervNic)) {
+              Write-Host "  No known NIC vendor detected — skipping driver install"
+          }
+
+          # === 3. AUDIO / CHIPSET / OTHER ===
           Write-Host ""
           Write-Host ">>> [3/4] Audio & Chipset Drivers"
 
-          # Realtek Audio
-          $audio = Get-CimInstance Win32_SoundDevice
-          $audio | ForEach-Object { Write-Host "  Audio: $($_.Name)" }
-          if ($audio | Where-Object { $_.Name -match "Realtek" }) {
-              winget install --id Realtek.RealtekAudioDriver --silent --accept-package-agreements --accept-source-agreements 2>$null
+          # Detect CPU vendor for chipset
+          $cpuVendor = (Get-CimInstance Win32_Processor).Manufacturer
+          Write-Host "  CPU Vendor: $cpuVendor"
+
+          if ($cpuVendor -match "Intel") {
+              Write-Host "  Intel CPU — installing chipset driver..."
+              winget install --id Intel.ChipsetINF --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+          } elseif ($cpuVendor -match "AMD") {
+              Write-Host "  AMD CPU — installing chipset driver..."
+              winget install --id AMD.ChipsetSoftware --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           }
 
-          # Intel Chipset
-          winget install --id Intel.ChipsetINF --silent --accept-package-agreements --accept-source-agreements 2>$null
+          # Realtek Audio
+          $audio = Get-CimInstance Win32_SoundDevice -ErrorAction SilentlyContinue
+          if ($audio) {
+              $audio | ForEach-Object { Write-Host "  Audio: $($_.Name)" }
+              if ($audio | Where-Object { $_.Name -match "Realtek" }) {
+                  winget install --id Realtek.RealtekAudioDriver --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+              }
+          } else {
+              Write-Host "  No audio device detected (virtual machine)"
+          }
 
           # === 4. WINDOWS UPDATE — ALL REMAINING DRIVERS ===
           Write-Host ""
@@ -636,7 +665,7 @@ jobs:
               Write-Host "    $($_.Name) — Speed: $($_.Speed)"
           }
           Write-Host "  Audio:"
-          Get-CimInstance Win32_SoundDevice | ForEach-Object {
+          Get-CimInstance Win32_SoundDevice -ErrorAction SilentlyContinue | ForEach-Object {
               Write-Host "    $($_.Name) — $($_.Status)"
           }
           Write-Host "============================================="
@@ -779,9 +808,9 @@ jobs:
       - name: Install DirectX Runtime
         continue-on-error: true
         run: |
-          winget install --id Microsoft.DirectX --silent --accept-package-agreements --accept-source-agreements 2>$null
+          winget install --id Microsoft.DirectX --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           # Fallback: Microsoft Visual C++ Redistributable (required by many DirectX apps)
-          winget install --id Microsoft.VCRedist.2015+.x64 --silent --accept-package-agreements --accept-source-agreements 2>$null
+          winget install --id Microsoft.VCRedist.2015+.x64 --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           Write-Host "DirectX Runtime + VC++ Redistributable installed"
 
       - name: Install Microsoft Store
