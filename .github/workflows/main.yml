@@ -209,8 +209,14 @@ jobs:
           $totalRAM = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
           $pagefileSize = [math]::Round($totalRAM / 1MB * 1.5, 0)
           $pagefileMax = [math]::Round($totalRAM / 1MB * 3, 0)
-          wmic computersystem set AutomaticManagedPagefile=False 2>$null
-          wmic pagefileset where "name='C:\\pagefile.sys'" set InitialSize=$pagefileSize,MaximumSize=$pagefileMax 2>$null
+          $cs = Get-CimInstance Win32_ComputerSystem
+          $cs | Set-CimInstance -Property @{AutomaticManagedPagefile=$false} -ErrorAction SilentlyContinue
+          $pf = Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue
+          if ($pf) {
+              $pf | Set-CimInstance -Property @{InitialSize=$pagefileSize; MaximumSize=$pagefileMax} -ErrorAction SilentlyContinue
+          } else {
+              New-CimInstance -ClassName Win32_PageFileSetting -Property @{Name="C:\pagefile.sys"; InitialSize=$pagefileSize; MaximumSize=$pagefileMax} -ErrorAction SilentlyContinue
+          }
           Write-Host "  Pagefile: ${pagefileSize}MB — ${pagefileMax}MB"
 
           # === Reduce memory for system cache (prioritize apps) ===
