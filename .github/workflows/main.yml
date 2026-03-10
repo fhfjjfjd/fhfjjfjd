@@ -829,8 +829,7 @@ jobs:
               Write-Host "  Intel CPU — installing chipset driver..."
               winget install --id Intel.ChipsetINF --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
           } elseif ($cpuVendor -match "AMD") {
-              Write-Host "  AMD CPU — installing chipset driver..."
-              winget install --id AMD.ChipsetSoftware --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+              Write-Host "  AMD CPU detected (virtual machine — chipset driver not needed)"
           }
 
           # Realtek Audio
