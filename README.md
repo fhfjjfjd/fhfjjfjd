@@ -40,7 +40,7 @@ Create a free Windows remote desktop via GitHub Actions, connected through Tails
 **Total estimated: 12–25 GB recovered**
 
 ### 🎨 OpenGL & Video Optimization
-- **Mesa3D** OpenGL software renderer installed (64-bit + 32-bit DLLs)
+- **Mesa3D** OpenGL software renderer — auto-fetches latest version from GitHub (64-bit + 32-bit DLLs)
 - OpenGL ICD registered in Windows registry
 - **WARP** DirectX software renderer enabled
 - **K-Lite Codec Pack Full** — H.264, H.265/HEVC, VP9, AV1, AAC, etc.

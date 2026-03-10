@@ -469,21 +469,32 @@ jobs:
 
           # === 1. Install Mesa3D (Software OpenGL for virtual GPU) ===
           Write-Host ""
-          Write-Host ">>> [1/4] Installing Mesa3D OpenGL..."
-          $mesaVersion = "24.3.4"
-          $mesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/$mesaVersion/mesa3d-$mesaVersion-release-msvc.7z"
-          $mesaFallback = "https://github.com/AugFJTan/mesa-dist-win-prebuilt/releases/latest/download/mesa3d-release-msvc-x64.7z"
+          Write-Host ">>> [1/4] Installing Mesa3D OpenGL (latest)..."
 
-          # Download Mesa3D
+          # Auto-detect latest Mesa3D version from GitHub API
           $downloaded = $false
-          foreach ($url in @($mesaUrl, $mesaFallback)) {
-              try {
-                  Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\mesa3d.7z" -UseBasicParsing -ErrorAction Stop
+          try {
+              $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/pal1000/mesa-dist-win/releases/latest" -UseBasicParsing -ErrorAction Stop
+              $mesaVersion = $releaseInfo.tag_name
+              $mesaAsset = $releaseInfo.assets | Where-Object { $_.name -match "mesa3d-.*release-msvc\.7z$" } | Select-Object -First 1
+              if ($mesaAsset) {
+                  Write-Host "  Latest version: $mesaVersion"
+                  Invoke-WebRequest -Uri $mesaAsset.browser_download_url -OutFile "$env:TEMP\mesa3d.7z" -UseBasicParsing -ErrorAction Stop
                   $downloaded = $true
-                  Write-Host "  Downloaded Mesa3D from: $url"
-                  break
+                  Write-Host "  Downloaded: $($mesaAsset.name)"
+              }
+          } catch {
+              Write-Host "  GitHub API failed — trying fallback..."
+          }
+
+          # Fallback: direct URL
+          if (-not $downloaded) {
+              try {
+                  Invoke-WebRequest -Uri "https://github.com/pal1000/mesa-dist-win/releases/latest/download/mesa3d-release-msvc.7z" -OutFile "$env:TEMP\mesa3d.7z" -UseBasicParsing -ErrorAction Stop
+                  $downloaded = $true
+                  Write-Host "  Downloaded Mesa3D from fallback URL"
               } catch {
-                  Write-Host "  Failed: $url — trying next..."
+                  Write-Host "  Fallback also failed"
               }
           }
 
