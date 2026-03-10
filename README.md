@@ -41,8 +41,11 @@ Create a free Windows remote desktop via GitHub Actions, connected through Tails
 
 ### 🎨 OpenGL & Video Optimization
 - **Mesa3D** OpenGL software renderer — auto-fetches latest version from GitHub (64-bit + 32-bit DLLs)
-- OpenGL ICD registered in Windows registry
+- OpenGL ICD registered in Windows registry (64-bit System32 + 32-bit Wow6432Node)
 - **WARP** DirectX software renderer enabled
+- **Minecraft / GLFW OpenGL fix** — Mesa environment variables: `GL 4.5`, `GLSL 450`, `llvmpipe` driver
+- `LIBGL_ALWAYS_SOFTWARE=1` — forces software rendering on virtual GPU
+- OpenGL registered for **Hyper-V Video adapter** GPU class registry
 - **K-Lite Codec Pack Full** — H.264, H.265/HEVC, VP9, AV1, AAC, etc.
 - **RDP video optimization** — VideoPlaybackPolicy, Media Foundation frame server
 - **Multimedia scheduling** — video playback set to High priority (GPU Priority=8)
