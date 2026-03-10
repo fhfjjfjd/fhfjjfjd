@@ -111,8 +111,7 @@ All software is installed via `winget`. Default is **off** unless noted.
 | Discord | `Discord.Discord` | Off |
 | Steam | `Valve.Steam` | Off |
 | Sublime Text | `SublimeHQ.SublimeText.4` | Off |
-| FileZilla | `TimKosse.FileZilla.Client` | Off |
-| WinSCP | `WinSCP.WinSCP` | Off |
+| FileZilla + WinSCP | `TimKosse.FileZilla.Client` + `WinSCP.WinSCP` | Off |
 
 ### 🌐 Always Installed (No Toggle)
 - **Tailscale** VPN (required for RDP connection)
@@ -171,14 +170,13 @@ All other software (Chrome, Docker, WSL2, DirectX, Microsoft Store, Edge uninsta
 | `install_discord` | Install Discord | `false` |
 | `install_steam` | Install Steam | `false` |
 | `install_sublimetext` | Install Sublime Text | `false` |
-| `install_filezilla` | Install FileZilla (FTP Client) | `false` |
-| `install_winscp` | Install WinSCP (SFTP Client) | `false` |
-| `install_chrome` | Install Google Chrome | `false` |
+| `install_file_transfer` | Install FileZilla + WinSCP | `false` |
+| `install_chrome` | Install Chrome + Uninstall Edge | `false` |
 | `install_wsl` | Install WSL2 + Ubuntu | `false` |
 | `install_docker` | Install Docker Desktop | `false` |
 | `install_directx` | Install DirectX + VC++ Redist | `false` |
 | `install_store` | Install Microsoft Store | `false` |
-| `uninstall_edge` | Uninstall Microsoft Edge | `false` |
+
 
 ## 🖥️ Runner Specs (GitHub Actions `windows-latest`)
 

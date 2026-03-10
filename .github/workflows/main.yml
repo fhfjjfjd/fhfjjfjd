@@ -97,18 +97,13 @@ on:
         required: false
         type: boolean
         default: false
-      install_filezilla:
-        description: 'Install FileZilla (FTP Client)'
-        required: false
-        type: boolean
-        default: false
-      install_winscp:
-        description: 'Install WinSCP (SFTP Client)'
+      install_file_transfer:
+        description: 'Install FileZilla + WinSCP'
         required: false
         type: boolean
         default: false
       install_chrome:
-        description: 'Install Google Chrome'
+        description: 'Install Chrome + Uninstall Edge'
         required: false
         type: boolean
         default: false
@@ -129,11 +124,6 @@ on:
         default: false
       install_store:
         description: 'Install Microsoft Store'
-        required: false
-        type: boolean
-        default: false
-      uninstall_edge:
-        description: 'Uninstall Microsoft Edge'
         required: false
         type: boolean
         default: false
@@ -915,7 +905,7 @@ jobs:
           exit 0
 
       - name: Uninstall Microsoft Edge
-        if: ${{ inputs.uninstall_edge == true }}
+        if: ${{ inputs.install_chrome == true }}
         shell: pwsh
         continue-on-error: true
         run: |
@@ -1177,20 +1167,13 @@ jobs:
           Write-Host "Sublime Text installed"
           exit 0
 
-      - name: Install FileZilla
-        if: ${{ inputs.install_filezilla == true }}
+      - name: Install FileZilla + WinSCP
+        if: ${{ inputs.install_file_transfer == true }}
         continue-on-error: true
         run: |
-          winget install --id TimKosse.FileZilla.Client --source winget --silent --accept-package-agreements --accept-source-agreements
-          Write-Host "FileZilla installed"
-          exit 0
-
-      - name: Install WinSCP
-        if: ${{ inputs.install_winscp == true }}
-        continue-on-error: true
-        run: |
-          winget install --id WinSCP.WinSCP --source winget --silent --accept-package-agreements --accept-source-agreements
-          Write-Host "WinSCP installed"
+          winget install --id TimKosse.FileZilla.Client --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+          winget install --id WinSCP.WinSCP --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+          Write-Host "FileZilla + WinSCP installed"
           exit 0
 
       - name: Create RDP User
