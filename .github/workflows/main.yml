@@ -555,7 +555,34 @@ jobs:
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" `
             /v "HwSchMode" /t REG_DWORD /d 2 /f
 
+          # Set Mesa3D as default OpenGL for ALL apps (fixes Minecraft GLFW error)
+          [System.Environment]::SetEnvironmentVariable("MESA_GL_VERSION_OVERRIDE", "4.5", "Machine")
+          [System.Environment]::SetEnvironmentVariable("MESA_GLSL_VERSION_OVERRIDE", "450", "Machine")
+          [System.Environment]::SetEnvironmentVariable("GALLIUM_DRIVER", "llvmpipe", "Machine")
+          [System.Environment]::SetEnvironmentVariable("LIBGL_ALWAYS_SOFTWARE", "1", "Machine")
+
+          # Register Mesa OpenGL for Hyper-V Video adapter
+          $gpuClassKey = "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000"
+          reg add "$gpuClassKey" /v "OpenGLDriverName" /t REG_MULTI_SZ /d "opengl32.dll" /f 2>$null
+          reg add "$gpuClassKey" /v "OpenGLVersion" /t REG_DWORD /d 0x00040005 /f 2>$null
+          reg add "$gpuClassKey" /v "OpenGLFlags" /t REG_DWORD /d 0x00000001 /f 2>$null
+          reg add "$gpuClassKey" /v "OpenGLVendorVersion" /t REG_SZ /d "Mesa 24" /f 2>$null
+
+          # Also register under default OpenGL drivers path
+          reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers" `
+            /v "DLL" /t REG_SZ /d "opengl32.dll" /f
+          reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL" `
+            /v "DLL" /t REG_SZ /d "opengl32.dll" /f 2>$null
+          reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL" `
+            /v "DriverVersion" /t REG_DWORD /d 2 /f 2>$null
+          reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL" `
+            /v "Flags" /t REG_DWORD /d 1 /f 2>$null
+          reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL" `
+            /v "Version" /t REG_DWORD /d 2 /f 2>$null
+
           Write-Host "  OpenGL ICD registered + DirectX WARP enabled"
+          Write-Host "  Mesa environment variables set (GL 4.5, GLSL 450, llvmpipe)"
+          Write-Host "  Minecraft / GLFW OpenGL fix applied"
 
           # === 3. Video Playback & Streaming Optimization ===
           Write-Host ""
