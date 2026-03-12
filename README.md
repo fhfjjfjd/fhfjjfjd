@@ -97,13 +97,9 @@ All software is installed via `winget`. Default is **off** unless noted.
 | Software | Winget ID | Default |
 |----------|-----------|---------|
 | VS Code | `Microsoft.VisualStudioCode` | Off |
-| Node.js LTS | `OpenJS.NodeJS.LTS` | Off |
-| Python 3.13 | `Python.Python.3.13` | Off |
 | Git | `Git.Git` | Off |
 | 7-Zip | `7zip.7zip` | Off |
 | Notepad++ | `Notepad++.Notepad++` | Off |
-| Java JDK 21 | `Oracle.JDK.21` | Off |
-| .NET 8 Runtime | `Microsoft.DotNet.Runtime.8` | Off |
 | WinRAR | `RARLab.WinRAR` | Off |
 | VLC | `VideoLAN.VLC` | Off |
 | Firefox | `Mozilla.Firefox` | Off |
@@ -116,7 +112,21 @@ All software is installed via `winget`. Default is **off** unless noted.
 | Sublime Text | `SublimeHQ.SublimeText.4` | Off |
 | FileZilla + WinSCP | `TimKosse.FileZilla.Client` + `WinSCP.WinSCP` | Off |
 
+### 💻 Programming Languages (Single Input)
+
+Gộp vào 1 input `install_languages` — nhập tên ngôn ngữ cách nhau bằng dấu phẩy:
+
+| Keyword | Package | Winget ID |
+|---------|---------|-----------|
+| `nodejs` | Node.js LTS | `OpenJS.NodeJS.LTS` |
+| `python` | Python 3.13 | `Python.Python.3.13` |
+| `java` | Java JDK 21 | `Oracle.JDK.21` |
+| `dotnet` | .NET 8 Runtime + Desktop Runtime | `Microsoft.DotNet.Runtime.8` |
+
+**Ví dụ**: `nodejs,python` → cài Node.js + Python. Để trống = không cài.
+
 > **Note**: Some inputs are bundled to stay within GitHub's 25-input limit:
+> - `install_languages` = Node.js, Python, Java, .NET (comma-separated)
 > - `install_file_transfer` = FileZilla + WinSCP
 > - `install_chrome` = Chrome install + Edge uninstall
 > - `install_directx` = DirectX + VC++ Redistributable
@@ -162,13 +172,10 @@ All other software (Chrome, Docker, WSL2, DirectX, Microsoft Store, Edge uninsta
 |-------|-------------|---------|
 | `username` | RDP login username | `RDP` |
 | `install_vscode` | Install VS Code | `false` |
-| `install_nodejs` | Install Node.js LTS | `false` |
-| `install_python` | Install Python 3.13 | `false` |
+| `install_languages` | Languages: `nodejs,python,java,dotnet` | `''` (empty) |
 | `install_git` | Install Git | `false` |
 | `install_7zip` | Install 7-Zip | `false` |
 | `install_notepadpp` | Install Notepad++ | `false` |
-| `install_java` | Install Java JDK 21 | `false` |
-| `install_dotnet` | Install .NET 8 Runtime | `false` |
 | `install_winrar` | Install WinRAR | `false` |
 | `install_vlc` | Install VLC | `false` |
 | `install_firefox` | Install Firefox | `false` |

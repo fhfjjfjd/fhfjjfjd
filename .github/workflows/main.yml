@@ -12,16 +12,10 @@ on:
         required: false
         type: boolean
         default: false
-      install_nodejs:
-        description: 'Install Node.js (LTS)'
+      install_languages:
+        description: 'Languages: nodejs,python,java,dotnet (comma-separated)'
         required: false
-        type: boolean
-        default: false
-      install_python:
-        description: 'Install Python 3.13'
-        required: false
-        type: boolean
-        default: false
+        default: ''
       install_git:
         description: 'Install Git'
         required: false
@@ -37,16 +31,7 @@ on:
         required: false
         type: boolean
         default: false
-      install_java:
-        description: 'Install Java (JDK 21)'
-        required: false
-        type: boolean
-        default: false
-      install_dotnet:
-        description: 'Install .NET 8 Runtime'
-        required: false
-        type: boolean
-        default: false
+
       install_winrar:
         description: 'Install WinRAR'
         required: false
@@ -993,20 +978,34 @@ jobs:
           Write-Host "VS Code installed"
           exit 0
 
-      - name: Install Node.js
-        if: ${{ inputs.install_nodejs == true }}
+      - name: Install Programming Languages
+        if: ${{ inputs.install_languages != '' }}
         continue-on-error: true
         run: |
-          winget install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
-          Write-Host "Node.js installed"
-          exit 0
-
-      - name: Install Python
-        if: ${{ inputs.install_python == true }}
-        continue-on-error: true
-        run: |
-          winget install --id Python.Python.3.13 --silent --accept-package-agreements --accept-source-agreements
-          Write-Host "Python installed"
+          $langs = "${{ inputs.install_languages }}".ToLower().Split(',') | ForEach-Object { $_.Trim() }
+          Write-Host "=== Installing Languages: $($langs -join ', ') ==="
+          
+          if ($langs -contains "nodejs") {
+              Write-Host "  Installing Node.js LTS..."
+              winget install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
+              Write-Host "  Node.js installed"
+          }
+          if ($langs -contains "python") {
+              Write-Host "  Installing Python 3.13..."
+              winget install --id Python.Python.3.13 --silent --accept-package-agreements --accept-source-agreements
+              Write-Host "  Python installed"
+          }
+          if ($langs -contains "java") {
+              Write-Host "  Installing Java JDK 21..."
+              winget install --id Oracle.JDK.21 --silent --accept-package-agreements --accept-source-agreements
+              Write-Host "  Java JDK 21 installed"
+          }
+          if ($langs -contains "dotnet") {
+              Write-Host "  Installing .NET 8 Runtime..."
+              winget install --id Microsoft.DotNet.Runtime.8 --silent --accept-package-agreements --accept-source-agreements
+              winget install --id Microsoft.DotNet.DesktopRuntime.8 --silent --accept-package-agreements --accept-source-agreements
+              Write-Host "  .NET 8 Runtime installed"
+          }
           exit 0
 
       - name: Install Git
@@ -1033,29 +1032,12 @@ jobs:
           Write-Host "Notepad++ installed"
           exit 0
 
-      - name: Install Java (JDK 21)
-        if: ${{ inputs.install_java == true }}
-        continue-on-error: true
-        run: |
-          winget install --id Oracle.JDK.21 --silent --accept-package-agreements --accept-source-agreements
-          Write-Host "Java JDK 21 installed"
-          exit 0
-
       - name: Install Docker Desktop
         if: ${{ inputs.install_docker == true }}
         continue-on-error: true
         run: |
           winget install --id Docker.DockerDesktop --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Docker Desktop installed"
-          exit 0
-
-      - name: Install .NET 8 Runtime
-        if: ${{ inputs.install_dotnet == true }}
-        continue-on-error: true
-        run: |
-          winget install --id Microsoft.DotNet.Runtime.8 --silent --accept-package-agreements --accept-source-agreements
-          winget install --id Microsoft.DotNet.DesktopRuntime.8 --silent --accept-package-agreements --accept-source-agreements
-          Write-Host ".NET 8 Runtime installed"
           exit 0
 
       - name: Install WinRAR
