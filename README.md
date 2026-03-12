@@ -102,7 +102,7 @@ All software is installed via `winget`. Default is **off** unless noted.
 | Git | `Git.Git` | Off |
 | 7-Zip | `7zip.7zip` | Off |
 | Notepad++ | `Notepad++.Notepad++` | Off |
-| Java JDK 21 | `Oracle.JDK.21` | Off |
+| Java JDK 21 + TLauncher | `Oracle.JDK.21` + TLauncher.jar | Off |
 | .NET 8 Runtime | `Microsoft.DotNet.Runtime.8` | Off |
 | WinRAR | `RARLab.WinRAR` | Off |
 | VLC | `VideoLAN.VLC` | Off |
@@ -115,6 +115,12 @@ All software is installed via `winget`. Default is **off** unless noted.
 | Steam | `Valve.Steam` | Off |
 | Sublime Text | `SublimeHQ.SublimeText.4` | Off |
 | FileZilla + WinSCP | `TimKosse.FileZilla.Client` + `WinSCP.WinSCP` | Off |
+
+> **Note**: Some inputs are bundled to stay within GitHub's 25-input limit:
+> - `install_java` = Java JDK 21 + **TLauncher** (Minecraft launcher, downloaded to `C:\TLauncher\` with desktop shortcut)
+> - `install_file_transfer` = FileZilla + WinSCP
+> - `install_chrome` = Chrome install + Edge uninstall
+> - `install_directx` = DirectX + VC++ Redistributable
 
 ### 🌐 Always Installed (No Toggle)
 - **Tailscale** VPN (required for RDP connection)
@@ -138,7 +144,8 @@ All other software (Chrome, Docker, WSL2, DirectX, Microsoft Store, Edge uninsta
 ```
 ├── .github/
 │   └── workflows/
-│       └── main.yml          # RDP workflow (main file)
+│       ├── main.yml          # RDP Full workflow (25 inputs, 1300+ lines)
+│       └── rdp-lite.yml      # RDP Lite workflow (minimal, fast setup)
 ├── H.sh                      # Termux: AutoGen Studio installer
 ├── Huy.sh                    # Termux: Basic tools setup (git, curl, python)
 └── README.md                 # This file
@@ -155,13 +162,13 @@ All other software (Chrome, Docker, WSL2, DirectX, Microsoft Store, Edge uninsta
 | Input | Description | Default |
 |-------|-------------|---------|
 | `username` | RDP login username | `RDP` |
-| `install_vscode` | Install VS Code | `true` |
+| `install_vscode` | Install VS Code | `false` |
 | `install_nodejs` | Install Node.js LTS | `false` |
 | `install_python` | Install Python 3.13 | `false` |
 | `install_git` | Install Git | `false` |
 | `install_7zip` | Install 7-Zip | `false` |
 | `install_notepadpp` | Install Notepad++ | `false` |
-| `install_java` | Install Java JDK 21 | `false` |
+| `install_java` | Install Java JDK 21 + TLauncher | `false` |
 | `install_dotnet` | Install .NET 8 Runtime | `false` |
 | `install_winrar` | Install WinRAR | `false` |
 | `install_vlc` | Install VLC | `false` |
