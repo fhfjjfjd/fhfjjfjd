@@ -1077,20 +1077,27 @@ jobs:
           reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v "DisableStoreApps" /f 2>$null
 
           if ($method -eq "reregister") {
-              # === Method 1: Re-register existing Store packages ===
-              Write-Host "  Re-registering Store packages..."
+              # === Method 1: wsreset -i (Windows Server 2025 native) ===
+              # Source: https://gist.github.com/valorad/0b4aae69f57c3d6de144fc30d33fa9c2
+              Write-Host "  Running wsreset -i (native Server 2025 method)..."
+              Start-Process wsreset.exe -ArgumentList "-i" -Wait -ErrorAction SilentlyContinue
+              Write-Host "  Waiting 30s for Store to install..."
+              Start-Sleep -Seconds 30
+              
+              # Re-register for all users
               Get-AppXPackage *WindowsStore* -AllUsers | Foreach {
                   Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml" -ErrorAction SilentlyContinue
               }
-              Start-Process wsreset.exe -Wait -ErrorAction SilentlyContinue
           }
           elseif ($method -eq "ltsc-script") {
               # === Method 2: LTSC-Add-MicrosoftStore script ===
+              # Source: https://github.com/kkkgo/LTSC-Add-MicrosoftStore (3.9k stars)
               Write-Host "  Downloading LTSC-Add-MicrosoftStore script..."
               $ltscDir = "$env:TEMP\LTSC-Store"
               New-Item -ItemType Directory -Path $ltscDir -Force | Out-Null
               try {
-                  $zipUrl = "https://github.com/kkkgo/LTSC-Add-MicrosoftStore/archive/refs/heads/master.zip"
+                  # Try release tag first (stable)
+                  $zipUrl = "https://github.com/kkkgo/LTSC-Add-MicrosoftStore/archive/refs/tags/2019.zip"
                   Invoke-WebRequest -Uri $zipUrl -OutFile "$ltscDir\ltsc-store.zip" -UseBasicParsing -ErrorAction Stop
                   Expand-Archive -Path "$ltscDir\ltsc-store.zip" -DestinationPath $ltscDir -Force
                   $addStoreCmd = Get-ChildItem -Path $ltscDir -Recurse -Filter "Add-Store.cmd" | Select-Object -First 1
@@ -1104,19 +1111,21 @@ jobs:
               Remove-Item -Path $ltscDir -Recurse -Force -ErrorAction SilentlyContinue
           }
           elseif ($method -eq "manual-cdn") {
-              # === Method 3: Manual install from Microsoft CDN + DISM ===
+              # === Method 3: Manual install from Microsoft CDN ===
+              # VCLibs: https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx (official Microsoft link)
               Write-Host "  Installing dependencies from Microsoft CDN..."
               $dlDir = "$env:TEMP\StoreManual"
               New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
               
-              # Install VCLibs dependency
+              # Install VCLibs x64 dependency (official aka.ms link)
               try {
+                  Write-Host "  Downloading VCLibs x64..."
                   Invoke-WebRequest -Uri "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx" -OutFile "$dlDir\VCLibs.appx" -UseBasicParsing -ErrorAction Stop
                   Add-AppxPackage -Path "$dlDir\VCLibs.appx" -ErrorAction SilentlyContinue
                   Write-Host "  VCLibs installed"
               } catch { Write-Host "  VCLibs download failed" }
               
-              # Re-register framework packages
+              # Re-register all framework packages
               @(
                   "Microsoft.NET.Native.Framework.2.2",
                   "Microsoft.NET.Native.Runtime.2.2",
@@ -1128,10 +1137,11 @@ jobs:
                   }
               }
               
-              # DISM add Store capability
+              # DISM add Store capability + wsreset
               Write-Host "  Adding Store via DISM..."
               DISM /Online /Add-Capability /CapabilityName:App.StoreInstall~~~~0.0.1.0 2>$null
-              Start-Process wsreset.exe -Wait -ErrorAction SilentlyContinue
+              Start-Process wsreset.exe -ArgumentList "-i" -Wait -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 30
               
               Remove-Item -Path $dlDir -Recurse -Force -ErrorAction SilentlyContinue
           }
