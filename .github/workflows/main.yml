@@ -315,9 +315,10 @@ jobs:
           Write-Host "      AGGRESSIVE DISK CLEANUP"
           Write-Host "============================================="
           Write-Host "  Disk Free before: ${diskBefore} GB"
+          Write-Host ""
+          Write-Host ">>> (0/7 - 0%) Starting cleanup..."
 
           # === 1. Temp files ===
-          Write-Host ""
           Write-Host ">>> (1/7 - 14%) Cleaning temp files..."
           @(
               "$env:TEMP\*",
