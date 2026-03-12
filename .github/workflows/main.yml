@@ -1080,73 +1080,78 @@ jobs:
         if: ${{ inputs.install_store == true }}
         continue-on-error: true
         run: |
-          Write-Host "=== Enabling Microsoft Store ==="
+          Write-Host "=== Enabling Microsoft Store (Windows Server 2025) ==="
 
-          # Re-enable Microsoft Store if disabled by policy
+          # Remove policies blocking Store
           reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v "RemoveWindowsStore" /f 2>$null
           reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v "DisableStoreApps" /f 2>$null
 
-          # Re-register Microsoft Store
-          Get-AppxPackage -AllUsers Microsoft.WindowsStore 2>$null | ForEach-Object {
+          # === Method 1: Re-register existing Store packages ===
+          Write-Host "  [1/3] Re-registering Store packages..."
+          Get-AppXPackage *WindowsStore* -AllUsers | Foreach {
               Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml" -ErrorAction SilentlyContinue
           }
 
-          # If Store is not installed, install it
           $store = Get-AppxPackage -AllUsers Microsoft.WindowsStore -ErrorAction SilentlyContinue
-          if (-not $store) {
-             Write-Host "  Store not found — installing from scratch..."
-             
-             # Download dependencies and Store from Microsoft CDN
-             $downloadDir = "$env:TEMP\StoreInstall"
-             New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
-             
-             $packages = @(
-                 @{ Name = "VCLibs"; Url = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"; File = "VCLibs.appx" },
-                 @{ Name = "UIXaml"; Url = "https://github.com/nicehash/NiceHashQuickMiner/releases/download/v0.5.4.6/Microsoft.UI.Xaml.2.8.x64.appx"; File = "UIXaml.appx" }
-             )
-             
-             foreach ($pkg in $packages) {
-                 Write-Host "  Downloading $($pkg.Name)..."
-                 try {
-                     Invoke-WebRequest -Uri $pkg.Url -OutFile "$downloadDir\$($pkg.File)" -UseBasicParsing -ErrorAction Stop
-                     Add-AppxPackage -Path "$downloadDir\$($pkg.File)" -ErrorAction SilentlyContinue
-                     Write-Host "  $($pkg.Name) installed"
-                 } catch {
-                     Write-Host "  $($pkg.Name) download failed — skipping"
-                 }
-             }
-             
-             # Re-register all existing framework packages
-             @(
-                 "Microsoft.NET.Native.Framework.2.2",
-                 "Microsoft.NET.Native.Runtime.2.2",
-                 "Microsoft.VCLibs.140.00",
-                 "Microsoft.UI.Xaml.2.8"
-             ) | ForEach-Object {
-                 Get-AppxPackage -AllUsers $_ 2>$null | ForEach-Object {
-                     Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml" -ErrorAction SilentlyContinue
-                 }
-             }
-             
-             # Install Store via PowerShell (Windows Server 2025 method)
-             Write-Host "  Installing Microsoft Store package..."
-             try {
-                 # Try winget first (if available)
-                 winget install --id 9WZDNCRFJBMP --source msstore --silent --accept-package-agreements --accept-source-agreements 2>$null
-             } catch {}
-             
-             # Fallback: Use DISM to add Store capability
-             $store2 = Get-AppxPackage -AllUsers Microsoft.WindowsStore -ErrorAction SilentlyContinue
-             if (-not $store2) {
-                 Write-Host "  Trying DISM method..."
-                 DISM /Online /Add-Capability /CapabilityName:App.StoreInstall~~~~0.0.1.0 2>$null
-                 
-                 # wsreset to force re-register
-                 Start-Process wsreset.exe -Wait -ErrorAction SilentlyContinue
-             }
-             
-             # Cleanup
-             Remove-Item -Path $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
+          if ($store) {
+              Write-Host "  Store found after re-register: v$($store.Version)"
+          } else {
+              # === Method 2: LTSC-Add-MicrosoftStore script ===
+              Write-Host "  [2/3] Using LTSC-Add-MicrosoftStore script..."
+              $ltscDir = "$env:TEMP\LTSC-Store"
+              New-Item -ItemType Directory -Path $ltscDir -Force | Out-Null
+              try {
+                  # Download LTSC-Add-MicrosoftStore from GitHub
+                  $zipUrl = "https://github.com/kkkgo/LTSC-Add-MicrosoftStore/archive/refs/heads/master.zip"
+                  Invoke-WebRequest -Uri $zipUrl -OutFile "$ltscDir\ltsc-store.zip" -UseBasicParsing -ErrorAction Stop
+                  Expand-Archive -Path "$ltscDir\ltsc-store.zip" -DestinationPath $ltscDir -Force
+                  
+                  # Run Add-Store.cmd
+                  $addStoreCmd = Get-ChildItem -Path $ltscDir -Recurse -Filter "Add-Store.cmd" | Select-Object -First 1
+                  if ($addStoreCmd) {
+                      Write-Host "  Running $($addStoreCmd.Name)..."
+                      Start-Process cmd.exe -ArgumentList "/c", "`"$($addStoreCmd.FullName)`"" -Wait -ErrorAction SilentlyContinue
+                  }
+              } catch {
+                  Write-Host "  LTSC script download failed: $($_.Exception.Message)"
+              }
+
+              $store = Get-AppxPackage -AllUsers Microsoft.WindowsStore -ErrorAction SilentlyContinue
+              if (-not $store) {
+                  # === Method 3: Manual AppxBundle from Microsoft CDN ===
+                  Write-Host "  [3/3] Installing dependencies + Store from Microsoft CDN..."
+                  $dlDir = "$env:TEMP\StoreManual"
+                  New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
+                  
+                  # Install VCLibs dependency
+                  try {
+                      Invoke-WebRequest -Uri "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx" -OutFile "$dlDir\VCLibs.appx" -UseBasicParsing -ErrorAction Stop
+                      Add-AppxPackage -Path "$dlDir\VCLibs.appx" -ErrorAction SilentlyContinue
+                      Write-Host "  VCLibs installed"
+                  } catch { Write-Host "  VCLibs download failed" }
+                  
+                  # Re-register framework packages
+                  @(
+                      "Microsoft.NET.Native.Framework.2.2",
+                      "Microsoft.NET.Native.Runtime.2.2",
+                      "Microsoft.VCLibs.140.00",
+                      "Microsoft.UI.Xaml.2.8"
+                  ) | ForEach-Object {
+                      Get-AppxPackage -AllUsers $_ 2>$null | ForEach-Object {
+                          Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml" -ErrorAction SilentlyContinue
+                      }
+                  }
+                  
+                  # DISM add Store capability
+                  Write-Host "  Adding Store via DISM..."
+                  DISM /Online /Add-Capability /CapabilityName:App.StoreInstall~~~~0.0.1.0 2>$null
+                  
+                  # wsreset to finalize
+                  Start-Process wsreset.exe -Wait -ErrorAction SilentlyContinue
+                  
+                  Remove-Item -Path $dlDir -Recurse -Force -ErrorAction SilentlyContinue
+              }
+              Remove-Item -Path $ltscDir -Recurse -Force -ErrorAction SilentlyContinue
           }
 
           # Enable Store services
@@ -1159,7 +1164,7 @@ jobs:
           if ($storeCheck) {
               Write-Host "  Microsoft Store ready: v$($storeCheck.Version)"
           } else {
-              Write-Host "  Microsoft Store installation attempted — may need login to activate"
+              Write-Host "  Microsoft Store installation attempted — may need restart to activate"
           }
           exit 0
 
