@@ -38,7 +38,7 @@ on:
         type: boolean
         default: false
       install_java:
-        description: 'Install Java (JDK 21) + TLauncher'
+        description: 'Install Java (JDK 21)'
         required: false
         type: boolean
         default: false
@@ -1033,32 +1033,12 @@ jobs:
           Write-Host "Notepad++ installed"
           exit 0
 
-      - name: Install Java (JDK 21) + TLauncher
+      - name: Install Java (JDK 21)
         if: ${{ inputs.install_java == true }}
         continue-on-error: true
         run: |
           winget install --id Oracle.JDK.21 --silent --accept-package-agreements --accept-source-agreements
           Write-Host "Java JDK 21 installed"
-          
-          # Install TLauncher
-          Write-Host "Downloading TLauncher..."
-          $tlDir = "C:\TLauncher"
-          New-Item -ItemType Directory -Path $tlDir -Force | Out-Null
-          $tlUrl = "https://tlauncher.org/jar"
-          Invoke-WebRequest -Uri $tlUrl -OutFile "$tlDir\TLauncher.jar" -UseBasicParsing
-          
-          # Create desktop shortcut
-          $desktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
-          $shell = New-Object -ComObject WScript.Shell
-          $shortcut = $shell.CreateShortcut("$desktop\TLauncher.lnk")
-          $shortcut.TargetPath = "javaw.exe"
-          $shortcut.Arguments = "-jar `"$tlDir\TLauncher.jar`""
-          $shortcut.WorkingDirectory = $tlDir
-          $shortcut.IconLocation = "javaw.exe,0"
-          $shortcut.Save()
-          
-          Write-Host "TLauncher installed at $tlDir"
-          Write-Host "Desktop shortcut created"
           exit 0
 
       - name: Install Docker Desktop
