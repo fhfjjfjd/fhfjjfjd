@@ -318,7 +318,7 @@ jobs:
 
           # === 1. Temp files ===
           Write-Host ""
-          Write-Host ">>> [1/7] Cleaning temp files..."
+          Write-Host ">>> (1/7 - 14%) Cleaning temp files..."
           @(
               "$env:TEMP\*",
               "C:\Users\runneradmin\AppData\Local\Temp\*",
@@ -334,7 +334,7 @@ jobs:
           }
 
           # === 2. Pre-installed tools (GitHub runner bloat) ===
-          Write-Host ">>> [2/7] Removing pre-installed bloat..."
+          Write-Host ">>> (2/7 - 28%) Removing pre-installed bloat..."
           @(
               "C:\ProgramData\Package Cache",
               "C:\Modules",
@@ -379,7 +379,7 @@ jobs:
           }
 
           # === 3. Remove pre-installed apps (Appx bloat) ===
-          Write-Host ">>> [3/7] Removing bloatware Appx packages..."
+          Write-Host ">>> (3/7 - 42%) Removing bloatware Appx packages..."
           @(
               "Microsoft.BingWeather",
               "Microsoft.BingNews",
@@ -414,12 +414,12 @@ jobs:
           }
 
           # === 4. Windows component cleanup ===
-          Write-Host ">>> [4/7] Windows component cleanup..."
+          Write-Host ">>> (4/7 - 57%) Windows component cleanup..."
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null
           Dism.exe /online /Cleanup-Image /SPSuperseded 2>$null
 
           # === 5. Clear Windows caches ===
-          Write-Host ">>> [5/7] Clearing Windows caches..."
+          Write-Host ">>> (5/7 - 71%) Clearing Windows caches..."
           @(
               "C:\Windows\Installer\$PatchCache$",
               "C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache",
@@ -433,11 +433,11 @@ jobs:
           }
 
           # === 6. Disable hibernation (frees ~3-4GB) ===
-          Write-Host ">>> [6/7] Disabling hibernation..."
+          Write-Host ">>> (6/7 - 85%) Disabling hibernation..."
           powercfg /h off
 
           # === 7. Compact OS (compress Windows files, frees ~2-3GB) ===
-          Write-Host ">>> [7/7] Compacting Windows OS..."
+          Write-Host ">>> (7/7 - 100%) Compacting Windows OS..."
           compact /CompactOS:always 2>$null
 
           # === SUMMARY ===
