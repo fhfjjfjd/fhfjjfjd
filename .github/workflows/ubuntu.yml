@@ -17,17 +17,41 @@ on:
         required: false
         default: ''
       install_docker:
-        description: 'Install Docker'
+        description: 'Install Docker + Docker Compose'
         required: false
         type: boolean
         default: false
       install_chrome:
-        description: 'Install Google Chrome'
+        description: 'Install Chrome + Firefox'
         required: false
         type: boolean
         default: false
       install_vscode:
-        description: 'Install VS Code'
+        description: 'Install VS Code + Sublime Text'
+        required: false
+        type: boolean
+        default: false
+      install_tools:
+        description: 'Tools: git,vim,htop,tmux,curl,wget,zip,neofetch (comma-separated)'
+        required: false
+        default: ''
+      install_media:
+        description: 'Install VLC + FFmpeg + GIMP'
+        required: false
+        type: boolean
+        default: false
+      install_file_transfer:
+        description: 'Install FileZilla + rclone'
+        required: false
+        type: boolean
+        default: false
+      install_telegram:
+        description: 'Install Telegram Desktop'
+        required: false
+        type: boolean
+        default: false
+      install_steam:
+        description: 'Install Steam (requires desktop)'
         required: false
         type: boolean
         default: false
@@ -44,194 +68,655 @@ jobs:
     steps:
       - name: System Info
         run: |
-          echo "============================================="
-          echo "         UBUNTU SYSTEM INFORMATION"
-          echo "============================================="
-          echo "  OS      : $(lsb_release -d -s)"
-          echo "  Kernel  : $(uname -r)"
-          echo "  CPU     : $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
-          echo "  Cores   : $(nproc) cores"
-          echo "  RAM     : $(free -h | awk '/Mem:/ {print $2}')"
-          echo "  Disk    : $(df -h / | awk 'NR==2 {print $4 " free / " $2 " total"}')"
-          echo "============================================="
+          echo ""
+          echo "======================================================="
+          echo "            UBUNTU SYSTEM INFORMATION"
+          echo "======================================================="
+          echo ""
+          echo "  OS       : $(lsb_release -d -s)"
+          echo "  Kernel   : $(uname -r)"
+          echo "  Arch     : $(uname -m)"
+          echo "  CPU      : $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
+          echo "  Cores    : $(nproc) cores / $(grep -c ^processor /proc/cpuinfo) threads"
+          echo "  RAM      : $(free -h | awk '/Mem:/ {print $2}') total / $(free -h | awk '/Mem:/ {print $7}') available"
+          echo "  Swap     : $(free -h | awk '/Swap:/ {print $2}')"
+          echo "  Disk     : $(df -h / | awk 'NR==2 {print $4 " free / " $2 " total (" $5 " used)"}')"
+          echo "  Hostname : $(hostname)"
+          echo "  Runner   : $RUNNER_NAME"
+          echo ""
+          echo "  GPU      : $(lspci 2>/dev/null | grep -i vga | cut -d: -f3 | xargs || echo 'N/A')"
+          echo "  Network  : $(ip -4 addr show eth0 2>/dev/null | grep inet | awk '{print $2}' || echo 'N/A')"
+          echo ""
+          echo "======================================================="
 
       - name: Performance Optimization
         run: |
-          echo "=== Optimizing Performance ==="
+          DISK_BEFORE=$(df -h / | awk 'NR==2 {print $4}')
+          RAM_BEFORE=$(free -m | awk '/Mem:/ {print $7}')
+          echo ""
+          echo "======================================================="
+          echo "      PERFORMANCE & DISK OPTIMIZATION"
+          echo "======================================================="
+          echo "  Disk Free before: $DISK_BEFORE"
+          echo "  RAM Available before: ${RAM_BEFORE}MB"
+          echo ""
 
-          # Disable unnecessary services
-          for svc in snapd snapd.socket snapd.apparmor \
-                     ModemManager accounts-daemon \
-                     apport multipathd; do
-              sudo systemctl disable --now $svc 2>/dev/null || true
+          # === (1/7 - 14%) Disable unnecessary services ===
+          echo ">>> (1/7 - 14%) Disabling unnecessary services..."
+          SERVICES_DISABLED=0
+          for svc in snapd snapd.socket snapd.apparmor snapd.seeded \
+                     ModemManager accounts-daemon apport multipathd \
+                     fwupd packagekit unattended-upgrades motd-news \
+                     networkd-dispatcher systemd-resolved Plymouth \
+                     cloud-init cloud-init-local cloud-config cloud-final \
+                     lxd-agent lxd-containers; do
+              if sudo systemctl disable --now "$svc" 2>/dev/null; then
+                  SERVICES_DISABLED=$((SERVICES_DISABLED + 1))
+              fi
           done
+          echo "  Services disabled: $SERVICES_DISABLED"
 
-          # Remove snap (frees ~500MB+)
-          sudo snap remove --purge lxd 2>/dev/null || true
-          sudo snap remove --purge core22 2>/dev/null || true
-          sudo snap remove --purge snapd 2>/dev/null || true
+          # === (2/7 - 28%) Remove snap completely ===
+          echo ">>> (2/7 - 28%) Removing snap & bloat..."
+          snap list 2>/dev/null | awk 'NR>1 {print $1}' | while read pkg; do
+              sudo snap remove --purge "$pkg" 2>/dev/null || true
+          done
           sudo apt-get purge -y snapd 2>/dev/null || true
-          sudo rm -rf /snap /var/snap /var/lib/snapd
+          sudo rm -rf /snap /var/snap /var/lib/snapd /var/cache/snapd
+          echo "  Snap removed"
 
-          # Clean apt cache
-          sudo apt-get autoremove -y 2>/dev/null || true
-          sudo apt-get clean
-
-          # Free disk space - remove pre-installed bloat
+          # === (3/7 - 42%) Remove pre-installed runner bloat ===
+          echo ">>> (3/7 - 42%) Removing pre-installed bloat..."
+          FREED=0
           for dir in /usr/share/dotnet \
                      /usr/local/lib/android \
                      /opt/ghc \
                      /usr/local/share/boost \
                      /usr/share/miniconda \
-                     /opt/hostedtoolcache/CodeQL; do
-              sudo rm -rf "$dir" 2>/dev/null || true
+                     /opt/hostedtoolcache/CodeQL \
+                     /opt/hostedtoolcache/go \
+                     /opt/hostedtoolcache/Ruby \
+                     /opt/hostedtoolcache/PyPy \
+                     /opt/hostedtoolcache/node \
+                     /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk \
+                     /usr/local/share/chromium \
+                     /usr/local/share/powershell \
+                     /usr/local/.ghcup \
+                     /usr/share/swift \
+                     /usr/share/sbt \
+                     /usr/local/julia* \
+                     /usr/local/graalvm \
+                     /usr/share/kotlinc \
+                     /imagegeneration \
+                     /opt/az \
+                     /usr/share/az_* \
+                     /opt/pipx; do
+              if [ -d "$dir" ] || [ -e "$dir" ]; then
+                  SIZE=$(du -sm "$dir" 2>/dev/null | awk '{print $1}')
+                  sudo rm -rf "$dir" 2>/dev/null || true
+                  if [ "${SIZE:-0}" -gt 50 ]; then
+                      echo "    Removed: $dir (~${SIZE}MB)"
+                      FREED=$((FREED + SIZE))
+                  fi
+              fi
           done
+          echo "  Freed ~${FREED}MB from pre-installed tools"
 
-          echo "  Performance optimization done"
-          df -h /
+          # === (4/7 - 57%) Remove unnecessary packages ===
+          echo ">>> (4/7 - 57%) Removing unnecessary packages..."
+          sudo apt-get purge -y \
+              aspnetcore-* dotnet-* mono-* \
+              firefox* google-chrome-stable \
+              microsoft-edge-stable \
+              powershell* \
+              php* \
+              mysql-* postgresql-* \
+              heroku* \
+              sphinxsearch \
+              azure-cli google-cloud-cli aws-cli-* \
+              2>/dev/null || true
+          sudo apt-get autoremove -y 2>/dev/null || true
+
+          # === (5/7 - 71%) Clean apt cache & logs ===
+          echo ">>> (5/7 - 71%) Cleaning caches & logs..."
+          sudo apt-get clean
+          sudo rm -rf /var/cache/apt/archives/* \
+                      /var/lib/apt/lists/* \
+                      /var/log/*.log /var/log/*.gz \
+                      /var/log/journal/* \
+                      /tmp/* /var/tmp/* \
+                      /root/.cache/* \
+                      /home/runner/.cache/* 2>/dev/null || true
+          sudo journalctl --vacuum-size=10M 2>/dev/null || true
+          echo "  Caches cleaned"
+
+          # === (6/7 - 85%) Optimize kernel parameters ===
+          echo ">>> (6/7 - 85%) Optimizing kernel parameters..."
+          sudo tee /etc/sysctl.d/99-performance.conf > /dev/null << 'SYSCTL'
+          # Network optimization
+          net.core.rmem_max = 16777216
+          net.core.wmem_max = 16777216
+          net.ipv4.tcp_rmem = 4096 87380 16777216
+          net.ipv4.tcp_wmem = 4096 65536 16777216
+          net.ipv4.tcp_congestion_control = bbr
+          net.core.default_qdisc = fq
+          net.ipv4.tcp_fastopen = 3
+          net.ipv4.tcp_mtu_probing = 1
+          # Memory optimization
+          vm.swappiness = 10
+          vm.dirty_ratio = 60
+          vm.dirty_background_ratio = 5
+          vm.vfs_cache_pressure = 50
+          # File system
+          fs.file-max = 2097152
+          fs.inotify.max_user_watches = 524288
+          SYSCTL
+          sudo sysctl -p /etc/sysctl.d/99-performance.conf 2>/dev/null || true
+          echo "  Kernel parameters optimized (BBR, low swappiness, high file limits)"
+
+          # === (7/7 - 100%) Set CPU governor & ulimits ===
+          echo ">>> (7/7 - 100%) Final optimizations..."
+          # Set CPU governor to performance (if available)
+          for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+              echo performance | sudo tee "$cpu" 2>/dev/null || true
+          done
+          # Increase ulimits
+          sudo tee /etc/security/limits.d/99-performance.conf > /dev/null << 'LIMITS'
+          * soft nofile 1048576
+          * hard nofile 1048576
+          * soft nproc 65535
+          * hard nproc 65535
+          LIMITS
+          echo "  CPU governor & ulimits configured"
+
+          # === SUMMARY ===
+          DISK_AFTER=$(df -h / | awk 'NR==2 {print $4}')
+          RAM_AFTER=$(free -m | awk '/Mem:/ {print $7}')
+          echo ""
+          echo "======================================================="
+          echo "  Disk Free before: $DISK_BEFORE"
+          echo "  Disk Free after:  $DISK_AFTER"
+          echo "  RAM Available:    ${RAM_BEFORE}MB → ${RAM_AFTER}MB"
+          echo "  Services disabled: $SERVICES_DISABLED"
+          echo "======================================================="
 
       - name: Create User
         run: |
           USERNAME="${{ inputs.username }}"
           PASSWORD=$(openssl rand -base64 12 | tr -d '/+=' | head -c 16)
 
-          # Create user with sudo
+          # Create user with home dir + bash shell
           sudo useradd -m -s /bin/bash "$USERNAME" 2>/dev/null || true
           echo "${USERNAME}:${PASSWORD}" | sudo chpasswd
           sudo usermod -aG sudo "$USERNAME"
 
-          # Enable password auth for SSH
+          # Passwordless sudo
           echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/$USERNAME > /dev/null
+          sudo chmod 440 /etc/sudoers.d/$USERNAME
+
+          # Nice bash prompt
+          sudo -u "$USERNAME" tee /home/$USERNAME/.bashrc > /dev/null << 'BASHRC'
+          export PS1='\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+          export EDITOR=nano
+          export LANG=en_US.UTF-8
+          alias ll='ls -alF --color=auto'
+          alias la='ls -A --color=auto'
+          alias l='ls -CF --color=auto'
+          alias ..='cd ..'
+          alias ...='cd ../..'
+          alias df='df -h'
+          alias free='free -h'
+          alias ports='ss -tulnp'
+          alias update='sudo apt update && sudo apt upgrade -y'
+          BASHRC
 
           echo "REMOTE_USER=$USERNAME" >> $GITHUB_ENV
           echo "REMOTE_PASS=$PASSWORD" >> $GITHUB_ENV
-          echo "  User '$USERNAME' created"
+          echo "  User '$USERNAME' created with sudo + custom bashrc"
+
+      - name: Configure SSH (Hardened)
+        run: |
+          echo "=== Configuring SSH (Hardened) ==="
+
+          sudo tee /etc/ssh/sshd_config.d/99-custom.conf > /dev/null << 'SSHD'
+          # Authentication
+          PasswordAuthentication yes
+          PermitRootLogin no
+          PubkeyAuthentication yes
+          MaxAuthTries 5
+          LoginGraceTime 30
+
+          # Security
+          X11Forwarding yes
+          AllowTcpForwarding yes
+          GatewayPorts no
+          PermitTunnel yes
+
+          # Performance
+          UseDNS no
+          Compression yes
+          TCPKeepAlive yes
+          ClientAliveInterval 60
+          ClientAliveCountMax 720
+
+          # SFTP
+          Subsystem sftp internal-sftp
+          SSHD
+
+          sudo systemctl restart sshd
+          echo "  SSH configured: password auth, X11 forwarding, keepalive 12h, SFTP enabled"
 
       - name: Install Desktop GUI (XFCE4 + XRDP)
         if: ${{ inputs.install_desktop == true }}
         run: |
-          echo "=== Installing XFCE4 Desktop + XRDP ==="
+          echo ""
+          echo "======================================================="
+          echo "      INSTALLING XFCE4 DESKTOP + XRDP"
+          echo "======================================================="
           export DEBIAN_FRONTEND=noninteractive
 
+          # === (1/5) Install XFCE4 + components ===
+          echo ">>> (1/5 - 20%) Installing XFCE4 desktop..."
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xfce4 xfce4-goodies xrdp dbus-x11 xorgxrdp 2>&1 | tail -5
+          sudo apt-get install -y -qq \
+              xfce4 xfce4-goodies xfce4-terminal xfce4-whiskermenu-plugin \
+              xrdp xorgxrdp dbus-x11 \
+              xdg-utils xdg-user-dirs \
+              thunar-archive-plugin file-roller \
+              network-manager-gnome \
+              adwaita-icon-theme-full papirus-icon-theme \
+              fonts-noto fonts-noto-cjk fonts-noto-color-emoji \
+              2>&1 | tail -3
 
-          # Configure XRDP
+          # === (2/5) Configure XRDP ===
+          echo ">>> (2/5 - 40%) Configuring XRDP..."
           sudo sed -i 's/^port=.*/port=3389/' /etc/xrdp/xrdp.ini
           sudo sed -i 's/^max_bpp=.*/max_bpp=32/' /etc/xrdp/xrdp.ini
           sudo sed -i 's/^xserverbpp=.*/xserverbpp=24/' /etc/xrdp/xrdp.ini
+          # Enable TCP nodelay for lower latency
+          sudo sed -i 's/^#tcp_nodelay=.*/tcp_nodelay=true/' /etc/xrdp/xrdp.ini
+          # Increase channel buffer for smoother experience
+          sudo sed -i 's/^#channel_code=.*/channel_code=1/' /etc/xrdp/xrdp.ini
 
-          # Set XFCE4 as default session
+          # XRDP session script
+          sudo tee /etc/xrdp/startwm.sh > /dev/null << 'STARTWM'
+          #!/bin/sh
+          unset DBUS_SESSION_BUS_ADDRESS
+          unset XDG_RUNTIME_DIR
+          if [ -r /etc/profile ]; then . /etc/profile; fi
+          export XDG_SESSION_TYPE=x11
+          exec startxfce4
+          STARTWM
+          sudo chmod +x /etc/xrdp/startwm.sh
+
+          # === (3/5) Set XFCE4 as default session ===
+          echo ">>> (3/5 - 60%) Setting XFCE4 as default..."
           echo "xfce4-session" | sudo tee /home/${{ inputs.username }}/.xsession > /dev/null
           sudo chown ${{ inputs.username }}:${{ inputs.username }} /home/${{ inputs.username }}/.xsession
 
-          # Fix XRDP polkit crash
-          sudo bash -c 'cat > /etc/polkit-1/localauthority/50-local.d/45-allow-colord.pkla << POLKIT
+          # === (4/5) Fix polkit + audio ===
+          echo ">>> (4/5 - 80%) Fixing polkit & audio..."
+          # Polkit: allow colord for all users (fixes XRDP crash)
+          sudo mkdir -p /etc/polkit-1/localauthority/50-local.d
+          sudo tee /etc/polkit-1/localauthority/50-local.d/45-allow-colord.pkla > /dev/null << 'POLKIT'
           [Allow Colord all Users]
           Identity=unix-user:*
           Action=org.freedesktop.color-manager.create-device;org.freedesktop.color-manager.create-profile;org.freedesktop.color-manager.delete-device;org.freedesktop.color-manager.delete-profile;org.freedesktop.color-manager.modify-device;org.freedesktop.color-manager.modify-profile
           ResultAny=no
           ResultInactive=no
           ResultActive=yes
-          POLKIT'
+          POLKIT
 
-          # Start XRDP
+          # Polkit: allow package management without password
+          sudo tee /etc/polkit-1/localauthority/50-local.d/46-allow-packagekit.pkla > /dev/null << 'POLKIT2'
+          [Allow Package Management]
+          Identity=unix-user:*
+          Action=org.freedesktop.packagekit.*;org.freedesktop.PolicyKit1.*
+          ResultAny=yes
+          ResultInactive=yes
+          ResultActive=yes
+          POLKIT2
+
+          # Install PulseAudio for XRDP audio
+          sudo apt-get install -y -qq pulseaudio 2>&1 | tail -1
+
+          # === (5/5) Start services ===
+          echo ">>> (5/5 - 100%) Starting XRDP..."
           sudo systemctl enable xrdp
           sudo systemctl start xrdp
+          sudo systemctl enable xrdp-sesman
+          sudo systemctl start xrdp-sesman
 
-          echo "  XFCE4 + XRDP installed (port 3389)"
-
-      - name: Configure SSH
-        run: |
-          echo "=== Configuring SSH ==="
-          sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
-          sudo systemctl restart sshd
-          echo "  SSH configured (port 22)"
+          echo ""
+          echo "======================================================="
+          echo "  XFCE4 Desktop + XRDP installed"
+          echo "  Port    : 3389"
+          echo "  Session : XFCE4 (32-bit color)"
+          echo "  Icons   : Papirus + Adwaita"
+          echo "  Fonts   : Noto (CJK + Emoji support)"
+          echo "  Audio   : PulseAudio"
+          echo "======================================================="
 
       - name: Install Programming Languages
         if: ${{ inputs.install_languages != '' }}
+        continue-on-error: true
         run: |
           LANGS="${{ inputs.install_languages }}"
-          echo "=== Installing Languages: $LANGS ==="
+          echo ""
+          echo "======================================================="
+          echo "      INSTALLING LANGUAGES: $LANGS"
+          echo "======================================================="
 
           IFS=',' read -ra LANG_ARRAY <<< "$LANGS"
+          INSTALLED=0
+          TOTAL=${#LANG_ARRAY[@]}
+
           for lang in "${LANG_ARRAY[@]}"; do
               lang=$(echo "$lang" | xargs | tr '[:upper:]' '[:lower:]')
+              INSTALLED=$((INSTALLED + 1))
+              PCT=$(( INSTALLED * 100 / TOTAL ))
+
               case "$lang" in
-                  nodejs)
-                      echo "  Installing Node.js LTS..."
+                  nodejs|node)
+                      echo ">>> ($INSTALLED/$TOTAL - $PCT%) Installing Node.js LTS..."
                       curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
                       sudo apt-get install -y -qq nodejs
-                      echo "  Node.js $(node -v) installed"
+                      # Install common global packages
+                      sudo npm install -g yarn pnpm npm@latest 2>/dev/null || true
+                      echo "  Node.js $(node -v) + npm $(npm -v) + yarn + pnpm"
                       ;;
-                  python)
-                      echo "  Installing Python 3..."
-                      sudo apt-get install -y -qq python3 python3-pip python3-venv
-                      echo "  Python $(python3 --version) installed"
+                  python|py)
+                      echo ">>> ($INSTALLED/$TOTAL - $PCT%) Installing Python 3..."
+                      sudo apt-get install -y -qq python3 python3-pip python3-venv python3-dev
+                      # Install useful packages
+                      pip3 install --user --break-system-packages pipx virtualenv 2>/dev/null || \
+                      pip3 install --user pipx virtualenv 2>/dev/null || true
+                      echo "  $(python3 --version) + pip $(pip3 --version | awk '{print $2}')"
                       ;;
                   java)
-                      echo "  Installing Java JDK 21..."
-                      sudo apt-get install -y -qq openjdk-21-jdk
-                      echo "  Java $(java --version 2>&1 | head -1) installed"
+                      echo ">>> ($INSTALLED/$TOTAL - $PCT%) Installing Java JDK 21..."
+                      sudo apt-get install -y -qq openjdk-21-jdk maven gradle 2>/dev/null
+                      sudo apt-get install -y -qq openjdk-21-jdk 2>/dev/null || \
+                      sudo apt-get install -y -qq default-jdk
+                      echo "  $(java --version 2>&1 | head -1)"
                       ;;
-                  dotnet)
-                      echo "  Installing .NET 8..."
+                  dotnet|net)
+                      echo ">>> ($INSTALLED/$TOTAL - $PCT%) Installing .NET 8..."
+                      # Add Microsoft repo
+                      wget -q https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O /tmp/ms-prod.deb
+                      sudo dpkg -i /tmp/ms-prod.deb 2>/dev/null || true
+                      sudo apt-get update -qq
                       sudo apt-get install -y -qq dotnet-sdk-8.0
-                      echo "  .NET installed"
+                      rm -f /tmp/ms-prod.deb
+                      echo "  .NET $(dotnet --version 2>/dev/null || echo '8.0') installed"
                       ;;
-                  go)
-                      echo "  Installing Go..."
-                      sudo apt-get install -y -qq golang-go 2>/dev/null || {
-                          GO_VER=$(curl -s https://go.dev/VERSION?m=text | head -1)
-                          curl -fsSL "https://go.dev/dl/${GO_VER}.linux-amd64.tar.gz" | sudo tar -C /usr/local -xzf -
-                          echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee /etc/profile.d/go.sh > /dev/null
-                      }
-                      echo "  Go installed"
+                  go|golang)
+                      echo ">>> ($INSTALLED/$TOTAL - $PCT%) Installing Go (latest)..."
+                      GO_VER=$(curl -s https://go.dev/VERSION?m=text | head -1)
+                      curl -fsSL "https://go.dev/dl/${GO_VER}.linux-amd64.tar.gz" | sudo tar -C /usr/local -xzf -
+                      echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee /etc/profile.d/go.sh > /dev/null
+                      echo 'export GOPATH=$HOME/go' | sudo tee -a /etc/profile.d/go.sh > /dev/null
+                      echo 'export PATH=$PATH:$HOME/go/bin' | sudo tee -a /etc/profile.d/go.sh > /dev/null
+                      export PATH=$PATH:/usr/local/go/bin
+                      echo "  Go $(/usr/local/go/bin/go version 2>/dev/null | awk '{print $3}')"
                       ;;
-                  rust)
-                      echo "  Installing Rust..."
-                      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>/dev/null
-                      echo "  Rust installed"
+                  rust|rs)
+                      echo ">>> ($INSTALLED/$TOTAL - $PCT%) Installing Rust..."
+                      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable 2>/dev/null
+                      source $HOME/.cargo/env 2>/dev/null || true
+                      # Install common tools
+                      $HOME/.cargo/bin/cargo install cargo-edit cargo-watch 2>/dev/null || true
+                      echo "  Rust $(~/.cargo/bin/rustc --version 2>/dev/null | awk '{print $2}') + cargo"
                       ;;
                   *)
-                      echo "  Unknown language: $lang (skipping)"
+                      echo ">>> ($INSTALLED/$TOTAL - $PCT%) Unknown: $lang (skipping)"
                       ;;
               esac
           done
-          echo "  All languages installed"
 
-      - name: Install Docker
-        if: ${{ inputs.install_docker == true }}
+          echo ""
+          echo "  All $TOTAL languages processed"
+          exit 0
+
+      - name: Install CLI Tools
+        if: ${{ inputs.install_tools != '' }}
+        continue-on-error: true
         run: |
-          echo "=== Installing Docker ==="
+          TOOLS="${{ inputs.install_tools }}"
+          echo "=== Installing CLI Tools: $TOOLS ==="
+
+          IFS=',' read -ra TOOL_ARRAY <<< "$TOOLS"
+          sudo apt-get update -qq
+          for tool in "${TOOL_ARRAY[@]}"; do
+              tool=$(echo "$tool" | xargs | tr '[:upper:]' '[:lower:]')
+              case "$tool" in
+                  git)
+                      sudo apt-get install -y -qq git git-lfs
+                      echo "  git $(git --version | awk '{print $3}') + git-lfs"
+                      ;;
+                  vim)
+                      sudo apt-get install -y -qq vim
+                      echo "  vim installed"
+                      ;;
+                  htop)
+                      sudo apt-get install -y -qq htop
+                      echo "  htop installed"
+                      ;;
+                  tmux)
+                      sudo apt-get install -y -qq tmux
+                      echo "  tmux installed"
+                      ;;
+                  curl)
+                      sudo apt-get install -y -qq curl
+                      echo "  curl installed"
+                      ;;
+                  wget)
+                      sudo apt-get install -y -qq wget
+                      echo "  wget installed"
+                      ;;
+                  zip)
+                      sudo apt-get install -y -qq zip unzip p7zip-full
+                      echo "  zip + unzip + 7zip installed"
+                      ;;
+                  neofetch)
+                      sudo apt-get install -y -qq neofetch
+                      echo "  neofetch installed"
+                      ;;
+                  nano)
+                      sudo apt-get install -y -qq nano
+                      echo "  nano installed"
+                      ;;
+                  tree)
+                      sudo apt-get install -y -qq tree
+                      echo "  tree installed"
+                      ;;
+                  jq)
+                      sudo apt-get install -y -qq jq
+                      echo "  jq installed"
+                      ;;
+                  bat)
+                      sudo apt-get install -y -qq bat 2>/dev/null || true
+                      echo "  bat installed"
+                      ;;
+                  ripgrep|rg)
+                      sudo apt-get install -y -qq ripgrep
+                      echo "  ripgrep installed"
+                      ;;
+                  fzf)
+                      sudo apt-get install -y -qq fzf
+                      echo "  fzf installed"
+                      ;;
+                  *)
+                      echo "  Trying apt install: $tool..."
+                      sudo apt-get install -y -qq "$tool" 2>/dev/null || echo "  $tool not found in apt"
+                      ;;
+              esac
+          done
+          exit 0
+
+      - name: Install Docker + Docker Compose
+        if: ${{ inputs.install_docker == true }}
+        continue-on-error: true
+        run: |
+          echo "=== Installing Docker + Docker Compose ==="
           curl -fsSL https://get.docker.com | sudo sh
           sudo usermod -aG docker ${{ inputs.username }}
-          echo "  Docker $(docker --version) installed"
 
-      - name: Install Google Chrome
+          # Install Docker Compose plugin
+          sudo apt-get install -y -qq docker-compose-plugin 2>/dev/null || true
+
+          # Enable & start
+          sudo systemctl enable docker
+          sudo systemctl start docker
+
+          echo "  Docker $(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',')"
+          echo "  Compose $(docker compose version 2>/dev/null | awk '{print $NF}')"
+
+          # Configure Docker daemon for performance
+          sudo tee /etc/docker/daemon.json > /dev/null << 'DAEMON'
+          {
+            "log-driver": "json-file",
+            "log-opts": { "max-size": "10m", "max-file": "3" },
+            "storage-driver": "overlay2",
+            "default-address-pools": [{"base": "172.80.0.0/16", "size": 24}]
+          }
+          DAEMON
+          sudo systemctl restart docker
+          echo "  Docker configured: overlay2, log rotation"
+          exit 0
+
+      - name: Install Chrome + Firefox
         if: ${{ inputs.install_chrome == true }}
+        continue-on-error: true
         run: |
-          echo "=== Installing Google Chrome ==="
+          echo "=== Installing Google Chrome + Firefox ==="
+
+          # Chrome
           wget -q -O /tmp/chrome.deb "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
           sudo apt-get install -y -qq /tmp/chrome.deb
           rm -f /tmp/chrome.deb
-          echo "  Chrome installed"
+          echo "  Chrome $(google-chrome --version 2>/dev/null | awk '{print $NF}')"
 
-      - name: Install VS Code
+          # Firefox (from Mozilla PPA for latest version)
+          sudo add-apt-repository -y ppa:mozillateam/ppa 2>/dev/null || true
+          echo 'Package: *
+          Pin: release o=LP-PPA-mozillateam
+          Pin-Priority: 1001' | sudo tee /etc/apt/preferences.d/mozilla-firefox > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq firefox 2>/dev/null || true
+          echo "  Firefox $(firefox --version 2>/dev/null | awk '{print $NF}')"
+          exit 0
+
+      - name: Install VS Code + Sublime Text
         if: ${{ inputs.install_vscode == true }}
+        continue-on-error: true
         run: |
-          echo "=== Installing VS Code ==="
+          echo "=== Installing VS Code + Sublime Text ==="
+
+          # VS Code
           wget -q -O /tmp/vscode.deb "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64"
           sudo apt-get install -y -qq /tmp/vscode.deb
           rm -f /tmp/vscode.deb
           echo "  VS Code installed"
 
+          # Install useful extensions for the user
+          sudo -u ${{ inputs.username }} code --install-extension ms-python.python 2>/dev/null || true
+          sudo -u ${{ inputs.username }} code --install-extension ms-vscode.cpptools 2>/dev/null || true
+
+          # Sublime Text
+          wget -qO - https://download.sublimetext.com/sublimehq-pub.gpg | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/sublimehq-archive.gpg > /dev/null
+          echo "deb https://download.sublimetext.com/ apt/stable/" | sudo tee /etc/apt/sources.list.d/sublime-text.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sublime-text
+          echo "  Sublime Text installed"
+          exit 0
+
+      - name: Install Media (VLC + FFmpeg + GIMP)
+        if: ${{ inputs.install_media == true }}
+        continue-on-error: true
+        run: |
+          echo "=== Installing VLC + FFmpeg + GIMP ==="
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vlc ffmpeg gimp 2>&1 | tail -3
+          echo "  VLC $(vlc --version 2>/dev/null | head -1 | awk '{print $3}')"
+          echo "  FFmpeg $(ffmpeg -version 2>/dev/null | head -1 | awk '{print $3}')"
+          echo "  GIMP installed"
+          exit 0
+
+      - name: Install FileZilla + rclone
+        if: ${{ inputs.install_file_transfer == true }}
+        continue-on-error: true
+        run: |
+          echo "=== Installing FileZilla + rclone ==="
+          sudo apt-get install -y -qq filezilla 2>/dev/null || true
+          # rclone (official install script)
+          curl -fsSL https://rclone.org/install.sh | sudo bash 2>/dev/null || true
+          echo "  FileZilla + rclone $(rclone version 2>/dev/null | head -1 | awk '{print $2}') installed"
+          exit 0
+
+      - name: Install Telegram Desktop
+        if: ${{ inputs.install_telegram == true }}
+        continue-on-error: true
+        run: |
+          echo "=== Installing Telegram Desktop ==="
+          sudo add-apt-repository -y ppa:atareao/telegram 2>/dev/null || true
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq telegram 2>/dev/null || {
+              # Fallback: snap-free flatpak or manual
+              wget -q -O /tmp/telegram.tar.xz "https://telegram.org/dl/desktop/linux"
+              sudo tar -xJf /tmp/telegram.tar.xz -C /opt/
+              sudo ln -sf /opt/Telegram/Telegram /usr/local/bin/telegram-desktop
+              rm -f /tmp/telegram.tar.xz
+          }
+          echo "  Telegram Desktop installed"
+          exit 0
+
+      - name: Install Steam
+        if: ${{ inputs.install_steam == true }}
+        continue-on-error: true
+        run: |
+          echo "=== Installing Steam ==="
+          # Enable i386 architecture for Steam
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          wget -q -O /tmp/steam.deb "https://cdn.akamai.steamstatic.com/client/installer/steam.deb"
+          sudo apt-get install -y -qq /tmp/steam.deb 2>/dev/null || true
+          sudo apt-get install -y -qq -f
+          rm -f /tmp/steam.deb
+          echo "  Steam installed"
+          exit 0
+
+      - name: Firewall Configuration
+        run: |
+          echo "=== Configuring Firewall ==="
+          # Install & configure UFW (allow only needed ports)
+          sudo apt-get install -y -qq ufw 2>/dev/null || true
+          sudo ufw default deny incoming
+          sudo ufw default allow outgoing
+          sudo ufw allow 22/tcp comment 'SSH'
+          if [ "${{ inputs.install_desktop }}" = "true" ]; then
+              sudo ufw allow 3389/tcp comment 'XRDP'
+          fi
+          sudo ufw --force enable
+          echo "  Firewall: SSH(22)"
+          if [ "${{ inputs.install_desktop }}" = "true" ]; then
+              echo "  Firewall: XRDP(3389)"
+          fi
+
       - name: Connect Tailscale
         run: |
           echo "=== Connecting Tailscale VPN ==="
           curl -fsSL https://tailscale.com/install.sh | sudo sh
-          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-ubuntu-${{ github.run_id }}
+
+          # Start Tailscale with SSH enabled
+          sudo tailscale up \
+              --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} \
+              --hostname=gh-ubuntu-${{ github.run_id }} \
+              --ssh 2>/dev/null || \
+          sudo tailscale up \
+              --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} \
+              --hostname=gh-ubuntu-${{ github.run_id }}
 
           TS_IP=""
           for i in $(seq 1 20); do
@@ -241,36 +726,72 @@ jobs:
           done
 
           if [ -z "$TS_IP" ]; then
-              echo "ERROR: Tailscale IP not assigned"
+              echo "ERROR: Tailscale IP not assigned after 60s"
               exit 1
           fi
+
+          # Allow Tailscale through firewall
+          sudo ufw allow in on tailscale0 2>/dev/null || true
+
           echo "TAILSCALE_IP=$TS_IP" >> $GITHUB_ENV
           echo "  Tailscale connected: $TS_IP"
+          echo "  Tailscale SSH: enabled"
+
+      - name: Final System Status
+        run: |
+          echo ""
+          echo "======================================================="
+          echo "         FINAL SYSTEM STATUS"
+          echo "======================================================="
+          echo ""
+          echo "  Disk : $(df -h / | awk 'NR==2 {print $4 " free / " $2 " total"}')"
+          echo "  RAM  : $(free -h | awk '/Mem:/ {print $7 " available / " $2 " total"}')"
+          echo "  Load : $(uptime | awk -F'load average:' '{print $2}' | xargs)"
+          echo ""
+          echo "  Installed software:"
+          command -v node    >/dev/null 2>&1 && echo "    Node.js  : $(node -v)"
+          command -v python3 >/dev/null 2>&1 && echo "    Python   : $(python3 --version 2>&1 | awk '{print $2}')"
+          command -v java    >/dev/null 2>&1 && echo "    Java     : $(java --version 2>&1 | head -1)"
+          command -v dotnet  >/dev/null 2>&1 && echo "    .NET     : $(dotnet --version 2>/dev/null)"
+          command -v go      >/dev/null 2>&1 && echo "    Go       : $(go version 2>/dev/null | awk '{print $3}')"
+          command -v rustc   >/dev/null 2>&1 && echo "    Rust     : $(rustc --version 2>/dev/null | awk '{print $2}')"
+          command -v docker  >/dev/null 2>&1 && echo "    Docker   : $(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',')"
+          command -v code    >/dev/null 2>&1 && echo "    VS Code  : installed"
+          command -v google-chrome >/dev/null 2>&1 && echo "    Chrome   : installed"
+          command -v firefox >/dev/null 2>&1 && echo "    Firefox  : installed"
+          echo ""
+          echo "======================================================="
 
       - name: Connection Info & Keep Alive
         run: |
           echo ""
           echo "======================================================="
-          echo "         UBUNTU REMOTE — CONNECTION DETAILS"
+          echo "       UBUNTU REMOTE — CONNECTION DETAILS"
           echo "======================================================="
           echo ""
           echo "  Tailscale IP : $TAILSCALE_IP"
           echo "  Username     : $REMOTE_USER"
           echo "  Password     : $REMOTE_PASS"
           echo ""
-          echo "  SSH  : ssh $REMOTE_USER@$TAILSCALE_IP"
+          echo "  ┌─────────────────────────────────────────────┐"
+          echo "  │  SSH  : ssh $REMOTE_USER@$TAILSCALE_IP      "
+          echo "  │  SFTP : sftp $REMOTE_USER@$TAILSCALE_IP     "
           if [ "${{ inputs.install_desktop }}" = "true" ]; then
-          echo "  RDP  : $TAILSCALE_IP:3389 (XFCE4 Desktop)"
+          echo "  │  RDP  : $TAILSCALE_IP:3389 (XFCE4 Desktop)  "
           fi
+          echo "  └─────────────────────────────────────────────┘"
           echo ""
-          echo "======================================================="
           echo "  Started  : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "  Timeout  : ~3600 minutes (60 hours)"
           echo "  Runner   : $RUNNER_NAME"
-          echo "======================================================="
+          echo "  OS       : $(lsb_release -d -s)"
           echo ""
-          echo "  Tip: Install Tailscale on your device first"
-          echo "  Cancel this workflow to terminate the session"
+          echo "======================================================="
+          echo "  Tips:"
+          echo "    1. Install Tailscale on your device first"
+          echo "    2. Tailscale SSH: ssh $REMOTE_USER@gh-ubuntu-${{ github.run_id }}"
+          echo "    3. Cancel this workflow to terminate the session"
+          echo "======================================================="
           echo ""
 
           START=$(date +%s)
@@ -279,6 +800,9 @@ jobs:
               HOURS=$((ELAPSED / 60))
               MINS=$((ELAPSED % 60))
               LEFT=$((3600 - ELAPSED))
-              echo "[$(date '+%H:%M:%S')] Uptime: ${HOURS}h${MINS}m | Remaining: ~${LEFT}m"
+              DISK=$(df -h / | awk 'NR==2 {print $4}')
+              RAM=$(free -m | awk '/Mem:/ {print $7}')
+              LOAD=$(uptime | awk -F'load average:' '{print $2}' | xargs | cut -d, -f1)
+              echo "[$(date '+%H:%M:%S')] Uptime: ${HOURS}h${MINS}m | Left: ~${LEFT}m | Disk: ${DISK} | RAM: ${RAM}MB | Load: ${LOAD}"
               sleep 300
           done
