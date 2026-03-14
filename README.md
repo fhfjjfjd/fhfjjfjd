@@ -165,11 +165,43 @@ All other software (Chrome, Docker, WSL2, DirectX, Microsoft Store, Edge uninsta
 ```
 ├── .github/
 │   └── workflows/
-│       ├── main.yml          # RDP Full workflow (25 inputs, 1300+ lines)
-│       └── rdp-lite.yml      # RDP Lite workflow (minimal, fast setup)
+│       ├── main.yml          # Windows RDP Full (22 inputs, 1300+ lines)
+│       ├── rdp-lite.yml      # Windows RDP Lite (minimal, fast setup)
+│       └── ubuntu.yml        # Ubuntu Remote Desktop (SSH + XFCE4/XRDP)
 ├── H.sh                      # Termux: AutoGen Studio installer
 ├── Huy.sh                    # Termux: Basic tools setup (git, curl, python)
 └── README.md                 # This file
+```
+
+## 🐧 Ubuntu Remote Desktop (`ubuntu.yml`)
+
+Workflow riêng cho Ubuntu runner — hỗ trợ cả SSH và GUI Desktop.
+
+### Tính năng
+- **XFCE4 Desktop + XRDP** — GUI desktop qua RDP port 3389 (tùy chọn)
+- **SSH** — luôn bật, kết nối qua Tailscale VPN
+- **Performance** — xóa snap, services không cần, bloat tools (~5GB+)
+- **Programming Languages** — `nodejs,python,java,dotnet,go,rust` (comma-separated)
+- **Docker, Chrome, VS Code** — toggle on/off
+
+### Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `username` | SSH/RDP username | `user` |
+| `install_desktop` | Cài XFCE4 + XRDP (GUI Desktop) | `true` |
+| `install_languages` | Languages: `nodejs,python,java,dotnet,go,rust` | `''` (empty) |
+| `install_docker` | Install Docker | `false` |
+| `install_chrome` | Install Google Chrome | `false` |
+| `install_vscode` | Install VS Code | `false` |
+
+### Kết nối
+```bash
+# SSH
+ssh user@<tailscale-ip>
+
+# RDP (nếu bật install_desktop)
+# Mở Remote Desktop → nhập <tailscale-ip>:3389
 ```
 
 ## 🔑 Required Secrets

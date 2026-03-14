@@ -1,0 +1,284 @@
+name: Ubuntu Remote Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: 'SSH/RDP Username'
+        required: false
+        default: 'user'
+      install_desktop:
+        description: 'Install Desktop GUI (XFCE4 + XRDP)'
+        required: false
+        type: boolean
+        default: true
+      install_languages:
+        description: 'Languages: nodejs,python,java,dotnet,go,rust (comma-separated)'
+        required: false
+        default: ''
+      install_docker:
+        description: 'Install Docker'
+        required: false
+        type: boolean
+        default: false
+      install_chrome:
+        description: 'Install Google Chrome'
+        required: false
+        type: boolean
+        default: false
+      install_vscode:
+        description: 'Install VS Code'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ubuntu-session
+  cancel-in-progress: false
+
+jobs:
+  ubuntu-remote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3600
+
+    steps:
+      - name: System Info
+        run: |
+          echo "============================================="
+          echo "         UBUNTU SYSTEM INFORMATION"
+          echo "============================================="
+          echo "  OS      : $(lsb_release -d -s)"
+          echo "  Kernel  : $(uname -r)"
+          echo "  CPU     : $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
+          echo "  Cores   : $(nproc) cores"
+          echo "  RAM     : $(free -h | awk '/Mem:/ {print $2}')"
+          echo "  Disk    : $(df -h / | awk 'NR==2 {print $4 " free / " $2 " total"}')"
+          echo "============================================="
+
+      - name: Performance Optimization
+        run: |
+          echo "=== Optimizing Performance ==="
+
+          # Disable unnecessary services
+          for svc in snapd snapd.socket snapd.apparmor \
+                     ModemManager accounts-daemon \
+                     apport multipathd; do
+              sudo systemctl disable --now $svc 2>/dev/null || true
+          done
+
+          # Remove snap (frees ~500MB+)
+          sudo snap remove --purge lxd 2>/dev/null || true
+          sudo snap remove --purge core22 2>/dev/null || true
+          sudo snap remove --purge snapd 2>/dev/null || true
+          sudo apt-get purge -y snapd 2>/dev/null || true
+          sudo rm -rf /snap /var/snap /var/lib/snapd
+
+          # Clean apt cache
+          sudo apt-get autoremove -y 2>/dev/null || true
+          sudo apt-get clean
+
+          # Free disk space - remove pre-installed bloat
+          for dir in /usr/share/dotnet \
+                     /usr/local/lib/android \
+                     /opt/ghc \
+                     /usr/local/share/boost \
+                     /usr/share/miniconda \
+                     /opt/hostedtoolcache/CodeQL; do
+              sudo rm -rf "$dir" 2>/dev/null || true
+          done
+
+          echo "  Performance optimization done"
+          df -h /
+
+      - name: Create User
+        run: |
+          USERNAME="${{ inputs.username }}"
+          PASSWORD=$(openssl rand -base64 12 | tr -d '/+=' | head -c 16)
+
+          # Create user with sudo
+          sudo useradd -m -s /bin/bash "$USERNAME" 2>/dev/null || true
+          echo "${USERNAME}:${PASSWORD}" | sudo chpasswd
+          sudo usermod -aG sudo "$USERNAME"
+
+          # Enable password auth for SSH
+          echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/$USERNAME > /dev/null
+
+          echo "REMOTE_USER=$USERNAME" >> $GITHUB_ENV
+          echo "REMOTE_PASS=$PASSWORD" >> $GITHUB_ENV
+          echo "  User '$USERNAME' created"
+
+      - name: Install Desktop GUI (XFCE4 + XRDP)
+        if: ${{ inputs.install_desktop == true }}
+        run: |
+          echo "=== Installing XFCE4 Desktop + XRDP ==="
+          export DEBIAN_FRONTEND=noninteractive
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xfce4 xfce4-goodies xrdp dbus-x11 xorgxrdp 2>&1 | tail -5
+
+          # Configure XRDP
+          sudo sed -i 's/^port=.*/port=3389/' /etc/xrdp/xrdp.ini
+          sudo sed -i 's/^max_bpp=.*/max_bpp=32/' /etc/xrdp/xrdp.ini
+          sudo sed -i 's/^xserverbpp=.*/xserverbpp=24/' /etc/xrdp/xrdp.ini
+
+          # Set XFCE4 as default session
+          echo "xfce4-session" | sudo tee /home/${{ inputs.username }}/.xsession > /dev/null
+          sudo chown ${{ inputs.username }}:${{ inputs.username }} /home/${{ inputs.username }}/.xsession
+
+          # Fix XRDP polkit crash
+          sudo bash -c 'cat > /etc/polkit-1/localauthority/50-local.d/45-allow-colord.pkla << POLKIT
+          [Allow Colord all Users]
+          Identity=unix-user:*
+          Action=org.freedesktop.color-manager.create-device;org.freedesktop.color-manager.create-profile;org.freedesktop.color-manager.delete-device;org.freedesktop.color-manager.delete-profile;org.freedesktop.color-manager.modify-device;org.freedesktop.color-manager.modify-profile
+          ResultAny=no
+          ResultInactive=no
+          ResultActive=yes
+          POLKIT'
+
+          # Start XRDP
+          sudo systemctl enable xrdp
+          sudo systemctl start xrdp
+
+          echo "  XFCE4 + XRDP installed (port 3389)"
+
+      - name: Configure SSH
+        run: |
+          echo "=== Configuring SSH ==="
+          sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+          sudo systemctl restart sshd
+          echo "  SSH configured (port 22)"
+
+      - name: Install Programming Languages
+        if: ${{ inputs.install_languages != '' }}
+        run: |
+          LANGS="${{ inputs.install_languages }}"
+          echo "=== Installing Languages: $LANGS ==="
+
+          IFS=',' read -ra LANG_ARRAY <<< "$LANGS"
+          for lang in "${LANG_ARRAY[@]}"; do
+              lang=$(echo "$lang" | xargs | tr '[:upper:]' '[:lower:]')
+              case "$lang" in
+                  nodejs)
+                      echo "  Installing Node.js LTS..."
+                      curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - 2>/dev/null
+                      sudo apt-get install -y -qq nodejs
+                      echo "  Node.js $(node -v) installed"
+                      ;;
+                  python)
+                      echo "  Installing Python 3..."
+                      sudo apt-get install -y -qq python3 python3-pip python3-venv
+                      echo "  Python $(python3 --version) installed"
+                      ;;
+                  java)
+                      echo "  Installing Java JDK 21..."
+                      sudo apt-get install -y -qq openjdk-21-jdk
+                      echo "  Java $(java --version 2>&1 | head -1) installed"
+                      ;;
+                  dotnet)
+                      echo "  Installing .NET 8..."
+                      sudo apt-get install -y -qq dotnet-sdk-8.0
+                      echo "  .NET installed"
+                      ;;
+                  go)
+                      echo "  Installing Go..."
+                      sudo apt-get install -y -qq golang-go 2>/dev/null || {
+                          GO_VER=$(curl -s https://go.dev/VERSION?m=text | head -1)
+                          curl -fsSL "https://go.dev/dl/${GO_VER}.linux-amd64.tar.gz" | sudo tar -C /usr/local -xzf -
+                          echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee /etc/profile.d/go.sh > /dev/null
+                      }
+                      echo "  Go installed"
+                      ;;
+                  rust)
+                      echo "  Installing Rust..."
+                      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>/dev/null
+                      echo "  Rust installed"
+                      ;;
+                  *)
+                      echo "  Unknown language: $lang (skipping)"
+                      ;;
+              esac
+          done
+          echo "  All languages installed"
+
+      - name: Install Docker
+        if: ${{ inputs.install_docker == true }}
+        run: |
+          echo "=== Installing Docker ==="
+          curl -fsSL https://get.docker.com | sudo sh
+          sudo usermod -aG docker ${{ inputs.username }}
+          echo "  Docker $(docker --version) installed"
+
+      - name: Install Google Chrome
+        if: ${{ inputs.install_chrome == true }}
+        run: |
+          echo "=== Installing Google Chrome ==="
+          wget -q -O /tmp/chrome.deb "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+          sudo apt-get install -y -qq /tmp/chrome.deb
+          rm -f /tmp/chrome.deb
+          echo "  Chrome installed"
+
+      - name: Install VS Code
+        if: ${{ inputs.install_vscode == true }}
+        run: |
+          echo "=== Installing VS Code ==="
+          wget -q -O /tmp/vscode.deb "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64"
+          sudo apt-get install -y -qq /tmp/vscode.deb
+          rm -f /tmp/vscode.deb
+          echo "  VS Code installed"
+
+      - name: Connect Tailscale
+        run: |
+          echo "=== Connecting Tailscale VPN ==="
+          curl -fsSL https://tailscale.com/install.sh | sudo sh
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-ubuntu-${{ github.run_id }}
+
+          TS_IP=""
+          for i in $(seq 1 20); do
+              TS_IP=$(tailscale ip -4 2>/dev/null | head -1)
+              if [ -n "$TS_IP" ]; then break; fi
+              sleep 3
+          done
+
+          if [ -z "$TS_IP" ]; then
+              echo "ERROR: Tailscale IP not assigned"
+              exit 1
+          fi
+          echo "TAILSCALE_IP=$TS_IP" >> $GITHUB_ENV
+          echo "  Tailscale connected: $TS_IP"
+
+      - name: Connection Info & Keep Alive
+        run: |
+          echo ""
+          echo "======================================================="
+          echo "         UBUNTU REMOTE — CONNECTION DETAILS"
+          echo "======================================================="
+          echo ""
+          echo "  Tailscale IP : $TAILSCALE_IP"
+          echo "  Username     : $REMOTE_USER"
+          echo "  Password     : $REMOTE_PASS"
+          echo ""
+          echo "  SSH  : ssh $REMOTE_USER@$TAILSCALE_IP"
+          if [ "${{ inputs.install_desktop }}" = "true" ]; then
+          echo "  RDP  : $TAILSCALE_IP:3389 (XFCE4 Desktop)"
+          fi
+          echo ""
+          echo "======================================================="
+          echo "  Started  : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "  Timeout  : ~3600 minutes (60 hours)"
+          echo "  Runner   : $RUNNER_NAME"
+          echo "======================================================="
+          echo ""
+          echo "  Tip: Install Tailscale on your device first"
+          echo "  Cancel this workflow to terminate the session"
+          echo ""
+
+          START=$(date +%s)
+          while true; do
+              ELAPSED=$(( ($(date +%s) - START) / 60 ))
+              HOURS=$((ELAPSED / 60))
+              MINS=$((ELAPSED % 60))
+              LEFT=$((3600 - ELAPSED))
+              echo "[$(date '+%H:%M:%S')] Uptime: ${HOURS}h${MINS}m | Remaining: ~${LEFT}m"
+              sleep 300
+          done
