@@ -283,7 +283,15 @@ jobs:
       - name: Configure SSH (Hardened)
         run: |
           echo "=== Configuring SSH (Hardened) ==="
+          
+          # Cài đặt openssh-server nếu chưa có
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq openssh-server
 
+          # Tạo thư mục chạy sshd
+          sudo mkdir -p /run/sshd
+
+          # Cấu hình SSH
           sudo tee /etc/ssh/sshd_config.d/99-custom.conf > /dev/null << 'SSHD'
           # Authentication
           PasswordAuthentication yes
@@ -309,8 +317,9 @@ jobs:
           Subsystem sftp internal-sftp
           SSHD
 
-          sudo systemctl restart sshd
-          echo "  SSH configured: password auth, X11 forwarding, keepalive 12h, SFTP enabled"
+          # Chạy sshd trực tiếp thay vì dùng systemctl
+          sudo /usr/sbin/sshd -D &
+          echo "  SSH configured and started manually in background"
 
       - name: Install Desktop Environment + XRDP
         if: ${{ inputs.install_desktop != 'off' }}
