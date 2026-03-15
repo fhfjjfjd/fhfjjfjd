@@ -331,17 +331,29 @@ jobs:
           echo "      INSTALLING DESKTOP: $DESKTOP + XRDP"
           echo "======================================================="
           export DEBIAN_FRONTEND=noninteractive
-          sudo apt-get update -qq
+          
+          # Fix DNS and use default Ubuntu mirrors
+          echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
+          echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf > /dev/null
+          
+          # Remove Azure-specific mirror config
+          sudo rm -f /etc/apt/apt-mirrors.txt
+          sudo rm -f /etc/apt/sources.list.d/azure*.list
+          
+          # Update with retry
+          for i in 1 2 3; do
+              sudo apt-get update && break || sleep 5
+          done
 
           # === (1/6) Install XRDP + common packages ===
           echo ">>> (1/6 - 16%) Installing XRDP + common packages..."
-          sudo apt-get install -y -qq \
+          sudo apt-get install -y \
               xrdp xorgxrdp dbus-x11 \
               xdg-utils xdg-user-dirs \
               file-roller \
               adwaita-icon-theme-full papirus-icon-theme \
-              fonts-noto fonts-noto-cjk fonts-noto-color-emoji \
-              pulseaudio \
+              fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji \
+              pulseaudio-utils \
               2>&1 | tail -3
 
           # === (2/6) Install chosen Desktop Environment ===
@@ -391,9 +403,10 @@ jobs:
                   sudo chown $USERNAME:$USERNAME /home/$USERNAME/.xsessionrc
                   ;;
               gnome)
-                  sudo apt-get install -y -qq \
+                  # Install GNOME desktop (Ubuntu 24.04 compatible)
+                  sudo apt-get install -y \
                       ubuntu-desktop-minimal gnome-tweaks gnome-shell-extensions \
-                      nautilus gnome-terminal gedit \
+                      nautilus-data gnome-shell gnome-control-center \
                       2>&1 | tail -3
                   SESSION_CMD="gnome-session"
                   XSESSION_FILE="gnome-session"
@@ -438,8 +451,15 @@ jobs:
           esac
           echo "  $DE_NAME installed (RAM: $DE_RAM)"
 
-          # === (3/6) Configure XRDP ===
-          echo ">>> (3/6 - 50%) Configuring XRDP..."
+          # === (3/6) Verify XRDP installation ===
+          echo ">>> (3/6 - 50%) Verifying XRDP installation..."
+          if [ ! -f /etc/xrdp/xrdp.ini ]; then
+              echo "XRDP not installed, installing now..."
+              sudo apt-get install -y xrdp xorgxrdp
+          fi
+          
+          # === (4/6) Configure XRDP ===
+          echo ">>> (4/6 - 66%) Configuring XRDP..."
           sudo sed -i 's/^port=.*/port=3389/' /etc/xrdp/xrdp.ini
           sudo sed -i 's/^max_bpp=.*/max_bpp=32/' /etc/xrdp/xrdp.ini
           sudo sed -i 's/^xserverbpp=.*/xserverbpp=24/' /etc/xrdp/xrdp.ini
@@ -448,8 +468,8 @@ jobs:
           # Increase TCP send buffer for smoother RDP
           sudo sysctl -w net.core.wmem_max=8388608 2>/dev/null || true
 
-          # === (4/6) XRDP session script (dynamic per DE) ===
-          echo ">>> (4/6 - 66%) Setting $DE_NAME as XRDP session..."
+          # === (5/6) XRDP session script (dynamic per DE) ===
+          echo ">>> (5/6 - 83%) Setting $DE_NAME as XRDP session..."
           sudo tee /etc/xrdp/startwm.sh > /dev/null << STARTWM
           #!/bin/sh
           unset DBUS_SESSION_BUS_ADDRESS
@@ -486,13 +506,22 @@ jobs:
           ResultActive=yes
           POLKIT2
 
-          # === (6/6) Start XRDP ===
-          echo ">>> (6/6 - 100%) Starting XRDP..."
+          # === (7/6) Start XRDP ===
+          echo ">>> (7/6 - 100%) Starting XRDP..."
           sudo adduser xrdp ssl-cert 2>/dev/null || true
-          sudo systemctl enable xrdp
-          sudo systemctl start xrdp
-          sudo systemctl enable xrdp-sesman
-          sudo systemctl start xrdp-sesman
+          
+          # Start XRDP manually (systemctl may not work in GitHub Actions)
+          sudo service xrdp start 2>/dev/null || sudo /usr/sbin/xrdp &
+          sudo service xrdp-sesman start 2>/dev/null || sudo /usr/sbin/xrdp-sesman &
+          
+          sleep 2
+          
+          # Verify XRDP is running
+          if pgrep -x xrdp > /dev/null; then
+              echo "  XRDP started successfully"
+          else
+              echo "  Warning: XRDP may not be running"
+          fi
 
           echo "DESKTOP_NAME=$DE_NAME" >> $GITHUB_ENV
 
