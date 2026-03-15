@@ -8,10 +8,16 @@ on:
         required: false
         default: 'user'
       install_desktop:
-        description: 'Install Desktop GUI (XFCE4 + XRDP)'
+        description: 'Desktop Environment (choose one)'
         required: false
-        type: boolean
-        default: true
+        type: choice
+        default: 'xfce4'
+        options:
+          - 'off'
+          - 'xfce4'
+          - 'kde-plasma'
+          - 'gnome'
+          - 'cinnamon'
       install_languages:
         description: 'Languages: nodejs,python,java,dotnet,go,rust (comma-separated)'
         required: false
@@ -306,57 +312,152 @@ jobs:
           sudo systemctl restart sshd
           echo "  SSH configured: password auth, X11 forwarding, keepalive 12h, SFTP enabled"
 
-      - name: Install Desktop GUI (XFCE4 + XRDP)
-        if: ${{ inputs.install_desktop == true }}
+      - name: Install Desktop Environment + XRDP
+        if: ${{ inputs.install_desktop != 'off' }}
         run: |
+          DESKTOP="${{ inputs.install_desktop }}"
+          USERNAME="${{ inputs.username }}"
           echo ""
           echo "======================================================="
-          echo "      INSTALLING XFCE4 DESKTOP + XRDP"
+          echo "      INSTALLING DESKTOP: $DESKTOP + XRDP"
           echo "======================================================="
           export DEBIAN_FRONTEND=noninteractive
-
-          # === (1/5) Install XFCE4 + components ===
-          echo ">>> (1/5 - 20%) Installing XFCE4 desktop..."
           sudo apt-get update -qq
+
+          # === (1/6) Install XRDP + common packages ===
+          echo ">>> (1/6 - 16%) Installing XRDP + common packages..."
           sudo apt-get install -y -qq \
-              xfce4 xfce4-goodies xfce4-terminal xfce4-whiskermenu-plugin \
               xrdp xorgxrdp dbus-x11 \
               xdg-utils xdg-user-dirs \
-              thunar-archive-plugin file-roller \
-              network-manager-gnome \
+              file-roller \
               adwaita-icon-theme-full papirus-icon-theme \
               fonts-noto fonts-noto-cjk fonts-noto-color-emoji \
+              pulseaudio \
               2>&1 | tail -3
 
-          # === (2/5) Configure XRDP ===
-          echo ">>> (2/5 - 40%) Configuring XRDP..."
+          # === (2/6) Install chosen Desktop Environment ===
+          echo ">>> (2/6 - 33%) Installing $DESKTOP desktop..."
+          case "$DESKTOP" in
+              xfce4)
+                  sudo apt-get install -y -qq \
+                      xfce4 xfce4-goodies xfce4-terminal xfce4-whiskermenu-plugin \
+                      thunar-archive-plugin network-manager-gnome \
+                      2>&1 | tail -3
+                  SESSION_CMD="startxfce4"
+                  XSESSION_FILE="xfce4-session"
+                  DE_NAME="XFCE4"
+                  DE_ENV="XFCE"
+                  DE_RAM="~576MB"
+                  ;;
+              kde-plasma)
+                  sudo apt-get install -y -qq \
+                      kde-plasma-desktop plasma-nm plasma-pa \
+                      dolphin konsole kate ark spectacle \
+                      sddm breeze breeze-icon-theme \
+                      2>&1 | tail -3
+                  SESSION_CMD="startplasma-x11"
+                  XSESSION_FILE="startplasma-x11"
+                  DE_NAME="KDE Plasma"
+                  DE_ENV="KDE"
+                  DE_RAM="~800MB"
+                  # Disable KDE compositor for XRDP performance
+                  echo ">>> Disabling KDE compositor for XRDP..."
+                  sudo mkdir -p /home/$USERNAME/.config
+                  sudo tee /home/$USERNAME/.config/kwinrc > /dev/null << 'KWINRC'
+          [Compositing]
+          Enabled=false
+          OpenGLIsUnsafe=false
+          Backend=XRender
+          KWINRC
+                  sudo chown -R $USERNAME:$USERNAME /home/$USERNAME/.config
+                  # KDE environment variables for XRDP
+                  sudo tee /home/$USERNAME/.xsessionrc > /dev/null << 'KDEENV'
+          export XDG_SESSION_DESKTOP=KDE
+          export XDG_DATA_DIRS=/usr/share/plasma:/usr/local/share:/usr/share
+          export XDG_CONFIG_DIRS=/etc/xdg
+          export KDE_SESSION_VERSION=5
+          export DESKTOP_SESSION=plasma
+          export XDG_CURRENT_DESKTOP=KDE
+          KDEENV
+                  sudo chown $USERNAME:$USERNAME /home/$USERNAME/.xsessionrc
+                  ;;
+              gnome)
+                  sudo apt-get install -y -qq \
+                      ubuntu-desktop-minimal gnome-tweaks gnome-shell-extensions \
+                      nautilus gnome-terminal gedit \
+                      2>&1 | tail -3
+                  SESSION_CMD="gnome-session"
+                  XSESSION_FILE="gnome-session"
+                  DE_NAME="GNOME"
+                  DE_ENV="GNOME"
+                  DE_RAM="~1.3GB"
+                  # Disable GNOME animations for XRDP performance
+                  echo ">>> Disabling GNOME animations for XRDP..."
+                  sudo -u $USERNAME dbus-launch gsettings set org.gnome.desktop.interface enable-animations false 2>/dev/null || true
+                  sudo -u $USERNAME dbus-launch gsettings set org.gnome.desktop.interface enable-hot-corners false 2>/dev/null || true
+                  # GNOME environment
+                  sudo tee /home/$USERNAME/.xsessionrc > /dev/null << 'GNOMEENV'
+          export XDG_SESSION_DESKTOP=gnome
+          export XDG_CURRENT_DESKTOP=ubuntu:GNOME
+          export GNOME_SHELL_SESSION_MODE=ubuntu
+          GNOMEENV
+                  sudo chown $USERNAME:$USERNAME /home/$USERNAME/.xsessionrc
+                  ;;
+              cinnamon)
+                  sudo add-apt-repository -y ppa:linuxmint-daily/cinnamon-daily 2>/dev/null || true
+                  sudo apt-get update -qq
+                  sudo apt-get install -y -qq \
+                      cinnamon cinnamon-desktop-environment \
+                      nemo nemo-fileroller gnome-terminal \
+                      2>&1 | tail -3
+                  SESSION_CMD="cinnamon-session"
+                  XSESSION_FILE="cinnamon-session"
+                  DE_NAME="Cinnamon"
+                  DE_ENV="X-Cinnamon"
+                  DE_RAM="~700MB"
+                  # Disable Cinnamon effects for XRDP performance
+                  echo ">>> Disabling Cinnamon effects for XRDP..."
+                  sudo -u $USERNAME dbus-launch gsettings set org.cinnamon.desktop.interface gtk-enable-animations false 2>/dev/null || true
+                  sudo -u $USERNAME dbus-launch gsettings set org.cinnamon enable-desktop-effects false 2>/dev/null || true
+                  # Cinnamon environment
+                  sudo tee /home/$USERNAME/.xsessionrc > /dev/null << 'CINENV'
+          export XDG_SESSION_DESKTOP=cinnamon
+          export XDG_CURRENT_DESKTOP=X-Cinnamon
+          CINENV
+                  sudo chown $USERNAME:$USERNAME /home/$USERNAME/.xsessionrc
+                  ;;
+          esac
+          echo "  $DE_NAME installed (RAM: $DE_RAM)"
+
+          # === (3/6) Configure XRDP ===
+          echo ">>> (3/6 - 50%) Configuring XRDP..."
           sudo sed -i 's/^port=.*/port=3389/' /etc/xrdp/xrdp.ini
           sudo sed -i 's/^max_bpp=.*/max_bpp=32/' /etc/xrdp/xrdp.ini
           sudo sed -i 's/^xserverbpp=.*/xserverbpp=24/' /etc/xrdp/xrdp.ini
-          # Enable TCP nodelay for lower latency
           sudo sed -i 's/^#tcp_nodelay=.*/tcp_nodelay=true/' /etc/xrdp/xrdp.ini
-          # Increase channel buffer for smoother experience
           sudo sed -i 's/^#channel_code=.*/channel_code=1/' /etc/xrdp/xrdp.ini
+          # Increase TCP send buffer for smoother RDP
+          sudo sysctl -w net.core.wmem_max=8388608 2>/dev/null || true
 
-          # XRDP session script
-          sudo tee /etc/xrdp/startwm.sh > /dev/null << 'STARTWM'
+          # === (4/6) XRDP session script (dynamic per DE) ===
+          echo ">>> (4/6 - 66%) Setting $DE_NAME as XRDP session..."
+          sudo tee /etc/xrdp/startwm.sh > /dev/null << STARTWM
           #!/bin/sh
           unset DBUS_SESSION_BUS_ADDRESS
           unset XDG_RUNTIME_DIR
           if [ -r /etc/profile ]; then . /etc/profile; fi
+          if [ -r ~/.xsessionrc ]; then . ~/.xsessionrc; fi
           export XDG_SESSION_TYPE=x11
-          exec startxfce4
+          exec $SESSION_CMD
           STARTWM
           sudo chmod +x /etc/xrdp/startwm.sh
 
-          # === (3/5) Set XFCE4 as default session ===
-          echo ">>> (3/5 - 60%) Setting XFCE4 as default..."
-          echo "xfce4-session" | sudo tee /home/${{ inputs.username }}/.xsession > /dev/null
-          sudo chown ${{ inputs.username }}:${{ inputs.username }} /home/${{ inputs.username }}/.xsession
+          # Set .xsession for user
+          echo "$XSESSION_FILE" | sudo tee /home/$USERNAME/.xsession > /dev/null
+          sudo chown $USERNAME:$USERNAME /home/$USERNAME/.xsession
 
-          # === (4/5) Fix polkit + audio ===
-          echo ">>> (4/5 - 80%) Fixing polkit & audio..."
-          # Polkit: allow colord for all users (fixes XRDP crash)
+          # === (5/6) Fix polkit ===
+          echo ">>> (5/6 - 83%) Fixing polkit..."
           sudo mkdir -p /etc/polkit-1/localauthority/50-local.d
           sudo tee /etc/polkit-1/localauthority/50-local.d/45-allow-colord.pkla > /dev/null << 'POLKIT'
           [Allow Colord all Users]
@@ -367,7 +468,6 @@ jobs:
           ResultActive=yes
           POLKIT
 
-          # Polkit: allow package management without password
           sudo tee /etc/polkit-1/localauthority/50-local.d/46-allow-packagekit.pkla > /dev/null << 'POLKIT2'
           [Allow Package Management]
           Identity=unix-user:*
@@ -377,24 +477,25 @@ jobs:
           ResultActive=yes
           POLKIT2
 
-          # Install PulseAudio for XRDP audio
-          sudo apt-get install -y -qq pulseaudio 2>&1 | tail -1
-
-          # === (5/5) Start services ===
-          echo ">>> (5/5 - 100%) Starting XRDP..."
+          # === (6/6) Start XRDP ===
+          echo ">>> (6/6 - 100%) Starting XRDP..."
+          sudo adduser xrdp ssl-cert 2>/dev/null || true
           sudo systemctl enable xrdp
           sudo systemctl start xrdp
           sudo systemctl enable xrdp-sesman
           sudo systemctl start xrdp-sesman
 
+          echo "DESKTOP_NAME=$DE_NAME" >> $GITHUB_ENV
+
           echo ""
           echo "======================================================="
-          echo "  XFCE4 Desktop + XRDP installed"
-          echo "  Port    : 3389"
-          echo "  Session : XFCE4 (32-bit color)"
-          echo "  Icons   : Papirus + Adwaita"
-          echo "  Fonts   : Noto (CJK + Emoji support)"
-          echo "  Audio   : PulseAudio"
+          echo "  $DE_NAME Desktop + XRDP installed"
+          echo "  Port      : 3389"
+          echo "  Session   : $DE_NAME (32-bit color)"
+          echo "  RAM usage : $DE_RAM"
+          echo "  Icons     : Papirus + Adwaita"
+          echo "  Fonts     : Noto (CJK + Emoji support)"
+          echo "  Audio     : PulseAudio"
           echo "======================================================="
 
       - name: Install Programming Languages
@@ -695,12 +796,12 @@ jobs:
           sudo ufw default deny incoming
           sudo ufw default allow outgoing
           sudo ufw allow 22/tcp comment 'SSH'
-          if [ "${{ inputs.install_desktop }}" = "true" ]; then
+          if [ "${{ inputs.install_desktop }}" != "off" ]; then
               sudo ufw allow 3389/tcp comment 'XRDP'
           fi
           sudo ufw --force enable
           echo "  Firewall: SSH(22)"
-          if [ "${{ inputs.install_desktop }}" = "true" ]; then
+          if [ "${{ inputs.install_desktop }}" != "off" ]; then
               echo "  Firewall: XRDP(3389)"
           fi
 
@@ -776,8 +877,8 @@ jobs:
           echo "  ┌─────────────────────────────────────────────┐"
           echo "  │  SSH  : ssh $REMOTE_USER@$TAILSCALE_IP      "
           echo "  │  SFTP : sftp $REMOTE_USER@$TAILSCALE_IP     "
-          if [ "${{ inputs.install_desktop }}" = "true" ]; then
-          echo "  │  RDP  : $TAILSCALE_IP:3389 (XFCE4 Desktop)  "
+          if [ "${{ inputs.install_desktop }}" != "off" ]; then
+          echo "  │  RDP  : $TAILSCALE_IP:3389 (${DESKTOP_NAME:-Desktop})  "
           fi
           echo "  └─────────────────────────────────────────────┘"
           echo ""
