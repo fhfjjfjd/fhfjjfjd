@@ -125,7 +125,7 @@ concurrency:
 jobs:
   secure-rdp:
     runs-on: windows-latest
-    timeout-minutes: 3600
+    timeout-minutes: 356
 
     steps:
       - name: System Info
