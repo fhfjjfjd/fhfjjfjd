@@ -467,25 +467,35 @@ jobs:
               sudo apt-get install -y xrdp xorgxrdp
           fi
           
-          # === (4/6) Configure XRDP ===
+          # === (4/6) Configure XRDP (Fixed for Android/Mobile clients) ===
           echo ">>> (4/6 - 66%) Configuring XRDP..."
           sudo sed -i 's/^port=.*/port=3389/' /etc/xrdp/xrdp.ini
-          sudo sed -i 's/^max_bpp=.*/max_bpp=32/' /etc/xrdp/xrdp.ini
+          # FIX: Use 24-bit color for better Android/Mobile RDP client compatibility
+          sudo sed -i 's/^max_bpp=.*/max_bpp=24/' /etc/xrdp/xrdp.ini
           sudo sed -i 's/^xserverbpp=.*/xserverbpp=24/' /etc/xrdp/xrdp.ini
           sudo sed -i 's/^#tcp_nodelay=.*/tcp_nodelay=true/' /etc/xrdp/xrdp.ini
           sudo sed -i 's/^#channel_code=.*/channel_code=1/' /etc/xrdp/xrdp.ini
+          # FIX: Add security_layer for better compatibility
+          sudo sed -i 's/^security_layer=.*/security_layer=negotiate/' /etc/xrdp/xrdp.ini 2>/dev/null || true
           # Increase TCP send buffer for smoother RDP
           sudo sysctl -w net.core.wmem_max=8388608 2>/dev/null || true
 
-          # === (5/6) XRDP session script (dynamic per DE) ===
+          # === (5/6) XRDP session script (dynamic per DE, Fixed for Android) ===
           echo ">>> (5/6 - 83%) Setting $DE_NAME as XRDP session..."
           sudo tee /etc/xrdp/startwm.sh > /dev/null << STARTWM
           #!/bin/sh
+          # FIX: Proper session initialization for Android/Mobile RDP clients
           unset DBUS_SESSION_BUS_ADDRESS
           unset XDG_RUNTIME_DIR
+          
+          # Source system profiles and locale
           if [ -r /etc/profile ]; then . /etc/profile; fi
+          if [ -r /etc/default/locale ]; then . /etc/default/locale; fi
           if [ -r ~/.xsessionrc ]; then . ~/.xsessionrc; fi
+          
+          # Set session type
           export XDG_SESSION_TYPE=x11
+          
           exec $SESSION_CMD
           STARTWM
           sudo chmod +x /etc/xrdp/startwm.sh
@@ -515,21 +525,34 @@ jobs:
           ResultActive=yes
           POLKIT2
 
-          # === (7/6) Start XRDP ===
+          # === (7/6) Start XRDP (Fixed startup order) ===
           echo ">>> (7/6 - 100%) Starting XRDP..."
           sudo adduser xrdp ssl-cert 2>/dev/null || true
           
-          # Start XRDP manually (systemctl may not work in GitHub Actions)
-          sudo service xrdp start 2>/dev/null || sudo /usr/sbin/xrdp &
+          # FIX: Start sesman first, then xrdp
           sudo service xrdp-sesman start 2>/dev/null || sudo /usr/sbin/xrdp-sesman &
+          sleep 1
+          sudo service xrdp start 2>/dev/null || sudo /usr/sbin/xrdp &
           
-          sleep 2
+          # FIX: Wait longer for XRDP to fully initialize
+          sleep 5
           
-          # Verify XRDP is running
+          # Verify XRDP is running and listening
           if pgrep -x xrdp > /dev/null; then
               echo "  XRDP started successfully"
+              # Verify port 3389 is listening
+              if ss -tlnp | grep -q ':3389'; then
+                  echo "  Port 3389 is listening"
+              else
+                  echo "  Warning: Port 3389 not yet listening, waiting..."
+                  sleep 3
+              fi
           else
-              echo "  Warning: XRDP may not be running"
+              echo "  Warning: XRDP may not be running, attempting restart..."
+              sudo /usr/sbin/xrdp-sesman &
+              sleep 1
+              sudo /usr/sbin/xrdp &
+              sleep 3
           fi
 
           echo "DESKTOP_NAME=$DE_NAME" >> $GITHUB_ENV
