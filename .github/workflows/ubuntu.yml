@@ -26,17 +26,17 @@ on:
         description: 'Install Docker + Docker Compose'
         required: false
         type: boolean
-        default: false
+        default: true
       install_chrome:
         description: 'Install Chrome + Firefox'
         required: false
         type: boolean
-        default: false
+        default: true
       install_vscode:
         description: 'Install VS Code + Sublime Text'
         required: false
         type: boolean
-        default: false
+        default: true
       install_tools:
         description: 'Tools: git,vim,htop,tmux,curl,wget,zip,neofetch (comma-separated)'
         required: false
@@ -45,22 +45,22 @@ on:
         description: 'Install VLC + FFmpeg + GIMP'
         required: false
         type: boolean
-        default: false
+        default: true
       install_file_transfer:
         description: 'Install FileZilla + rclone'
         required: false
         type: boolean
-        default: false
+        default: true
       install_telegram:
         description: 'Install Telegram Desktop'
         required: false
         type: boolean
-        default: false
+        default: true
       install_steam:
         description: 'Install Steam (requires desktop)'
         required: false
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: ubuntu-session
