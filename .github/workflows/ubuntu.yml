@@ -21,7 +21,7 @@ on:
       install_languages:
         description: 'Languages: nodejs,python,java,dotnet,go,rust (comma-separated)'
         required: false
-        default: ''
+        default: 'nodejs,python,java,dotnet,go,rust'
       install_docker:
         description: 'Install Docker + Docker Compose'
         required: false
@@ -40,7 +40,7 @@ on:
       install_tools:
         description: 'Tools: git,vim,htop,tmux,curl,wget,zip,neofetch (comma-separated)'
         required: false
-        default: ''
+        default: 'git,vim,htop,tmux,curl,wget,zip,neofetch,nano,tree,jq,bat,ripgrep,fzf'
       install_media:
         description: 'Install VLC + FFmpeg + GIMP'
         required: false
