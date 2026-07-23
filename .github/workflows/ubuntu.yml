@@ -339,6 +339,9 @@ jobs:
           # Remove Azure-specific mirror config
           sudo rm -f /etc/apt/apt-mirrors.txt
           sudo rm -f /etc/apt/sources.list.d/azure*.list
+
+          # Enable universe repository (required for xrdp, xorgxrdp, etc.)
+          sudo add-apt-repository -y universe
           
           # Update with retry
           for i in 1 2 3; do
