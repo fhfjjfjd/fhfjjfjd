@@ -61,12 +61,12 @@ on:
         description: 'Install Microsoft Store (choose method)'
         required: false
         type: choice
-        default: 'reregister'
+        default: 'winget-bootstrap'
         options:
           - 'off'
           - 'reregister'
-          - 'ltsc-script'
           - 'manual-cdn'
+          - 'winget-bootstrap'
 
 concurrency:
   group: rdp-session
@@ -1025,26 +1025,64 @@ jobs:
                   Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml" -ErrorAction SilentlyContinue
               }
           }
-          elseif ($method -eq "ltsc-script") {
-              # === Method 2: LTSC-Add-MicrosoftStore script ===
-              # Source: https://github.com/kkkgo/LTSC-Add-MicrosoftStore (3.9k stars)
-              Write-Host "  Downloading LTSC-Add-MicrosoftStore script..."
-              $ltscDir = "$env:TEMP\LTSC-Store"
-              New-Item -ItemType Directory -Path $ltscDir -Force | Out-Null
+          elseif ($method -eq "winget-bootstrap") {
+              # === Method 3: Bootstrap winget-cli from GitHub releases (2026 method) ===
+              # Source: https://github.com/microsoft/winget-cli/releases
+              Write-Host "  Bootstrapping winget-cli from GitHub releases..."
+              $dlDir = "$env:TEMP\winget-bootstrap"
+              New-Item -ItemType Directory -Path $dlDir -Force | Out-Null
+              
               try {
-                  # Try release tag first (stable)
-                  $zipUrl = "https://github.com/kkkgo/LTSC-Add-MicrosoftStore/archive/refs/tags/2019.zip"
-                  Invoke-WebRequest -Uri $zipUrl -OutFile "$ltscDir\ltsc-store.zip" -UseBasicParsing -ErrorAction Stop
-                  Expand-Archive -Path "$ltscDir\ltsc-store.zip" -DestinationPath $ltscDir -Force
-                  $addStoreCmd = Get-ChildItem -Path $ltscDir -Recurse -Filter "Add-Store.cmd" | Select-Object -First 1
-                  if ($addStoreCmd) {
-                      Write-Host "  Running $($addStoreCmd.Name)..."
-                      Start-Process cmd.exe -ArgumentList "/c", "`"$($addStoreCmd.FullName)`"" -Wait -ErrorAction SilentlyContinue
+                  # Get latest winget release info
+                  $release = Invoke-RestMethod 'https://api.github.com/repos/microsoft/winget-cli/releases/latest'
+                  $tag = $release.tag_name
+                  $base = "https://github.com/microsoft/winget-cli/releases/download/$tag"
+                  
+                  Write-Host "  Latest winget version: $tag"
+                  
+                  # Download msixbundle
+                  Write-Host "  Downloading winget msixbundle..."
+                  Invoke-WebRequest "$base/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "$dlDir\bundle.msixbundle" -UseBasicParsing
+                  
+                  # Download license file
+                  $lic = $release.assets | Where-Object { $_.name -like '*License*.xml' } | Select-Object -First 1
+                  if ($lic) {
+                      Invoke-WebRequest $lic.browser_download_url -OutFile "$dlDir\License.xml" -UseBasicParsing
                   }
+                  
+                  # Download dependencies
+                  Write-Host "  Downloading dependencies..."
+                  Invoke-WebRequest "$base/DesktopAppInstaller_Dependencies.zip" -OutFile "$dlDir\deps.zip" -UseBasicParsing
+                  
+                  # Extract dependencies
+                  Add-Type -AssemblyName System.IO.Compression.FileSystem
+                  [IO.Compression.ZipFile]::ExtractToDirectory("$dlDir\deps.zip", "$dlDir\deps")
+                  
+                  # Install dependencies first (x64 only)
+                  $deps = Get-ChildItem "$dlDir\deps\x64" -Filter *.appx | ForEach-Object { $_.FullName }
+                  foreach ($dep in $deps) {
+                      Write-Host "  Installing dependency: $(Split-Path $dep -Leaf)"
+                      Add-AppxPackage -Path $dep -ForceApplicationShutdown -ErrorAction SilentlyContinue
+                  }
+                  
+                  # Provision system-wide with DISM
+                  Write-Host "  Provisioning winget system-wide..."
+                  Add-AppxProvisionedPackage -Online `
+                    -PackagePath "$dlDir\bundle.msixbundle" `
+                    -LicensePath "$dlDir\License.xml" `
+                    -DependencyPackagePath $deps `
+                    -ErrorAction SilentlyContinue
+                  
+                  # Also register for current user
+                  Add-AppxPackage -Path "$dlDir\bundle.msixbundle" -ForceApplicationShutdown -ErrorAction SilentlyContinue
+                  
+                  Write-Host "  winget-bootstrap completed"
+                  
               } catch {
-                  Write-Host "  LTSC script failed: $($_.Exception.Message)"
+                  Write-Host "  winget-bootstrap failed: $($_.Exception.Message)"
               }
-              Remove-Item -Path $ltscDir -Recurse -Force -ErrorAction SilentlyContinue
+              
+              Remove-Item -Path $dlDir -Recurse -Force -ErrorAction SilentlyContinue
           }
           elseif ($method -eq "manual-cdn") {
               # === Method 3: Manual install from Microsoft CDN ===
