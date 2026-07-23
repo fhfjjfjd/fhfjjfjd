@@ -273,23 +273,6 @@ jobs:
           @("HKLM\SOFTWARE\Microsoft\Windows\DWM EnableHWAcceleration 1","HKLM\SOFTWARE\Microsoft\Windows\DWM Composition 1",
             "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers TdrLevel 0") | % { $p=$_ -split ' '; reg add $p[0] /v $p[1] /t REG_DWORD /d $p[2] /f }
 
-      - name: Update Drivers
-        continue-on-error: true
-        run: |
-          Write-Host "`n=== DRIVER UPDATE ==="
-          $gpus = Get-CimInstance Win32_VideoController
-          if ($gpus | ? { $_.Name -match "NVIDIA|GeForce" }) { winget install --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null }
-          if ($gpus | ? { $_.Name -match "AMD|Radeon" }) { winget install --id AMD.AMDSoftwareAdrenalinEdition --silent --accept-package-agreements --accept-source-agreements 2>$null }
-          if ($gpus | ? { $_.Name -match "Intel.*(Arc|Iris|UHD)" }) { winget install --id Intel.GraphicsDriver --silent --accept-package-agreements --accept-source-agreements 2>$null }
-          $nics = Get-CimInstance Win32_NetworkAdapter | ? { $_.PhysicalAdapter }
-          if ($nics | ? { $_.Name -match "Intel" }) { winget install --id Intel.EthernetAdapter --silent --accept-package-agreements --accept-source-agreements 2>$null }
-          if ($nics | ? { $_.Name -match "Realtek" }) { winget install --id Realtek.EthernetController --silent --accept-package-agreements --accept-source-agreements 2>$null }
-          $cpu = (Get-CimInstance Win32_Processor).Manufacturer
-          if ($cpu -match "Intel") { winget install --id Intel.ChipsetINF --silent --accept-package-agreements --accept-source-agreements 2>$null }
-          $aud = Get-CimInstance Win32_SoundDevice -EA SilentlyContinue
-          if ($aud | ? { $_.Name -match "Realtek" }) { winget install --id Realtek.RealtekAudioDriver --silent --accept-package-agreements --accept-source-agreements 2>$null }
-          Write-Host "Drivers updated"
-
       - name: Install WSL2
         if: ${{ inputs.install_wsl }}
         continue-on-error: true
