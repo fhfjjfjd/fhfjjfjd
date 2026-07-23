@@ -801,7 +801,7 @@ jobs:
           echo "=== Installing Telegram Desktop ==="
           sudo add-apt-repository -y ppa:atareao/telegram 2>/dev/null || true
           sudo apt-get update -qq
-          sudo apt-get install -y -qq telegram 2>/dev/null || {
+          sudo apt-get install -y -qq telegram-desktop 2>/dev/null || {
               # Fallback: snap-free flatpak or manual
               wget -q -O /tmp/telegram.tar.xz "https://telegram.org/dl/desktop/linux"
               sudo tar -xJf /tmp/telegram.tar.xz -C /opt/
