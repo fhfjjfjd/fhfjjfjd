@@ -15,53 +15,53 @@ on:
         description: 'Install Git'
         required: false
         type: boolean
-        default: false
+        default: true
       install_7zip:
         description: 'Install 7-Zip'
         required: false
         type: boolean
-        default: false
+        default: true
       install_notepadpp:
         description: 'Install Notepad++'
         required: false
         type: boolean
-        default: false
+        default: true
 
       install_winrar:
         description: 'Install WinRAR'
         required: false
         type: boolean
-        default: false
+        default: true
       install_vlc:
         description: 'Install VLC Media Player'
         required: false
         type: boolean
-        default: false
+        default: true
       install_file_transfer:
         description: 'Install FileZilla + WinSCP'
         required: false
         type: boolean
-        default: false
+        default: true
       install_chrome:
         description: 'Install Chrome + Uninstall Edge'
         required: false
         type: boolean
-        default: false
+        default: true
       install_wsl:
         description: 'Install WSL2 + Ubuntu'
         required: false
         type: boolean
-        default: false
+        default: true
       install_directx:
         description: 'Install DirectX + VC++ Redistributable'
         required: false
         type: boolean
-        default: false
+        default: true
       install_store:
         description: 'Install Microsoft Store (choose method)'
         required: false
         type: choice
-        default: 'off'
+        default: 'reregister'
         options:
           - 'off'
           - 'reregister'
