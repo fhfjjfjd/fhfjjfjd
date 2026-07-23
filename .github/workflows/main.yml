@@ -192,45 +192,22 @@ jobs:
           $da = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
           Write-Host "`n  Free After: ${da} GB (+$([math]::Round($da-$db,1)) GB recovered)"
 
-      - name: Install OpenGL (Mesa3D) & Video Optimization
-        continue-on-error: true
+      - name: Install Mesa3D (OpenGL)
+        uses: ssciwr/setup-mesa-dist-win@v3
+        with:
+          deployment-choice: '1'
+
+      - name: Configure Mesa3D Environment
         run: |
-          Write-Host "`n=== OPENGL + VIDEO OPTIMIZATION ==="
-
-          # Download Mesa3D
-          $ok = $false
-          try {
-            $r = Invoke-RestMethod "https://api.github.com/repos/pal1000/mesa-dist-win/releases/latest" -EA Stop
-            $a = $r.assets | ? { $_.name -match "mesa3d-.*release-msvc\.7z$" } | select -First 1
-            if ($a) { Invoke-WebRequest $a.browser_download_url -OutFile "$env:TEMP\mesa3d.7z" -UseBasicParsing; $ok = $true }
-          } catch {}
-          if (-not $ok) { try { Invoke-WebRequest "https://github.com/pal1000/mesa-dist-win/releases/latest/download/mesa3d-release-msvc.7z" -OutFile "$env:TEMP\mesa3d.7z" -UseBasicParsing; $ok = $true } catch {} }
-
-          if ($ok) {
-            if (-not (Get-Command 7z -EA SilentlyContinue)) { winget install --id 7zip.7zip --silent --accept-package-agreements --accept-source-agreements 2>$null; $env:PATH += ";C:\Program Files\7-Zip" }
-            $ep = "$env:TEMP\mesa3d"; 7z x "$env:TEMP\mesa3d.7z" -o"$ep" -y 2>$null
-            @("opengl32.dll","libgallium_wgl.dll","libglapi.dll","osmesa.dll") | % {
-              $s = Get-ChildItem $ep -Filter $_ -Recurse -EA SilentlyContinue | ? { $_.DirectoryName -match "x64" } | select -First 1
-              if ($s) { Copy-Item $s.FullName "$env:SystemRoot\System32\$_" -Force -EA SilentlyContinue }
-              $s32 = Get-ChildItem $ep -Filter $_ -Recurse -EA SilentlyContinue | ? { $_.DirectoryName -match "x86" } | select -First 1
-              if ($s32) { Copy-Item $s32.FullName "$env:SystemRoot\SysWOW64\$_" -Force -EA SilentlyContinue }
-            }
-            Remove-Item $ep -Recurse -Force -EA SilentlyContinue
-            Write-Host "  Mesa3D installed (64+32 bit)"
-          }
-
-          # OpenGL/DirectX registry
-          reg add "HKLM\SOFTWARE\Microsoft\DirectX" /v "ForceWARP" /t REG_DWORD /d 1 /f
-          $ogl = "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\MSOGL"
-          @("DLL opengl32.dll","DriverVersion 2","Flags 1","Version 2") | % { $p=$_ -split ' '; reg add $ogl /v $p[0] /t $(if($p[0]-eq 'DLL'){'REG_SZ'}else{'REG_DWORD'}) /d $p[1] /f }
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v "HwSchMode" /t REG_DWORD /d 2 /f
-
-          # Mesa env vars
-          @("MESA_GL_VERSION_OVERRIDE=4.5","MESA_GLSL_VERSION_OVERRIDE=450","GALLIUM_DRIVER=llvmpipe","LIBGL_ALWAYS_SOFTWARE=1") | % {
+          @("MESA_GL_VERSION_OVERRIDE=4.6","MESA_GLSL_VERSION_OVERRIDE=460","GALLIUM_DRIVER=llvmpipe","LIBGL_ALWAYS_SOFTWARE=1") | % {
             $k,$v = $_ -split '='; [System.Environment]::SetEnvironmentVariable($k,$v,"Machine")
           }
+          reg add "HKLM\SOFTWARE\Microsoft\DirectX" /v "ForceWARP" /t REG_DWORD /d 1 /f
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v "HwSchMode" /t REG_DWORD /d 2 /f
+          Write-Host "Mesa3D configured: OpenGL 4.6 + llvmpipe"
 
-          # Video optimization
+      - name: Video Optimization
+        run: |
           $ts = "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
           @("fEnableVirtualizedGraphics 1","AVC444ModePreferred 1","MaxFrameRate 60","ImageQuality 3",
             "VideoPlaybackPolicy 1","fEnableVideoPlaybackOptimization 1","UseHardwareGpuScheduler 1","bEnumerateHWBeforeSW 0") | % {
@@ -238,7 +215,6 @@ jobs:
           }
           reg add "HKLM\SOFTWARE\Microsoft\Windows Media Foundation" /v "EnableFrameServerMode" /t REG_DWORD /d 1 /f
 
-          # Multimedia scheduling
           $mm = "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
           reg add $mm /v "NetworkThrottlingIndex" /t REG_DWORD /d 0xffffffff /f
           reg add $mm /v "SystemResponsiveness" /t REG_DWORD /d 0 /f
@@ -247,13 +223,11 @@ jobs:
             $p=$_ -split ' '; $t = if($p[1] -match '^\d+$'){'REG_DWORD'}else{'REG_SZ'}; reg add $tp /v $p[0] /t $t /d $p[1] /f
           }
 
-          # Network throttling
           $nw = "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
           reg add $nw /v "DisableBandwidthThrottling" /t REG_DWORD /d 1 /f
 
-          # K-Lite Codecs
           winget install --id CodecGuide.K-LiteCodecPack.Full --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
-          Write-Host "  OpenGL: Mesa3D | Video: 60fps AVC444 | K-Lite codecs installed"
+          Write-Host "Video: 60fps AVC444 + K-Lite codecs"
 
       - name: Configure RDP
         run: |
