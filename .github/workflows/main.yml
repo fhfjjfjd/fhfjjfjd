@@ -7,10 +7,6 @@ on:
         description: 'RDP Username'
         required: false
         default: 'RDP'
-      install_languages:
-        description: 'Languages: nodejs,python,java,dotnet (comma-separated)'
-        required: false
-        default: ''
       install_git:
         description: 'Install Git'
         required: false
@@ -926,36 +922,6 @@ jobs:
           Set-ItemProperty -Path "$regPath\EdgeUpdate" -Name "DoNotUpdateToEdgeWithChromium" -Value 1 -Type DWord -Force
           Write-Host "Edge removed"
 
-
-      - name: Install Programming Languages
-        if: ${{ inputs.install_languages != '' }}
-        continue-on-error: true
-        run: |
-          $langs = "${{ inputs.install_languages }}".ToLower().Split(',') | ForEach-Object { $_.Trim() }
-          Write-Host "=== Installing Languages: $($langs -join ', ') ==="
-          
-          if ($langs -contains "nodejs") {
-              Write-Host "  Installing Node.js LTS..."
-              winget install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
-              Write-Host "  Node.js installed"
-          }
-          if ($langs -contains "python") {
-              Write-Host "  Installing Python 3.13..."
-              winget install --id Python.Python.3.13 --silent --accept-package-agreements --accept-source-agreements
-              Write-Host "  Python installed"
-          }
-          if ($langs -contains "java") {
-              Write-Host "  Installing Java JDK 21..."
-              winget install --id Oracle.JDK.21 --silent --accept-package-agreements --accept-source-agreements
-              Write-Host "  Java JDK 21 installed"
-          }
-          if ($langs -contains "dotnet") {
-              Write-Host "  Installing .NET 8 Runtime..."
-              winget install --id Microsoft.DotNet.Runtime.8 --silent --accept-package-agreements --accept-source-agreements
-              winget install --id Microsoft.DotNet.DesktopRuntime.8 --silent --accept-package-agreements --accept-source-agreements
-              Write-Host "  .NET 8 Runtime installed"
-          }
-          exit 0
 
       - name: Install Git
         if: ${{ inputs.install_git == true }}
