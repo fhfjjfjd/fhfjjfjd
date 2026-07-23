@@ -160,10 +160,6 @@ jobs:
               "NcbService",          # Network Connection Broker
               "Spooler",            # Print Spooler (if no printer)
               "PrintNotify",         # Printer Extensions
-              "BITS",                # Background Intelligent Transfer (after updates)
-              "wuauserv",            # Windows Update (not needed after setup)
-              "DoSvc",               # Delivery Optimization (~20MB)
-              "UsoSvc",              # Update Orchestrator
               "TimeBrokerSvc",       # Time Broker
               "TokenBroker",         # Web Authentication Broker
               "CDPSvc",              # Connected Devices Platform
