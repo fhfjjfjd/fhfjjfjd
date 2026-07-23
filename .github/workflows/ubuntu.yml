@@ -340,6 +340,12 @@ jobs:
           sudo rm -f /etc/apt/apt-mirrors.txt
           sudo rm -f /etc/apt/sources.list.d/azure*.list
 
+          # Replace Azure mirror URLs with direct Ubuntu archive (fixes GitHub Actions runner)
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list 2>/dev/null || true
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+
           # Enable universe repository (required for xrdp, xorgxrdp, etc.)
           sudo add-apt-repository -y universe
           
