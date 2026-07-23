@@ -52,11 +52,6 @@ on:
         required: false
         type: boolean
         default: false
-      install_docker:
-        description: 'Install Docker Desktop'
-        required: false
-        type: boolean
-        default: false
       install_directx:
         description: 'Install DirectX + VC++ Redistributable'
         required: false
@@ -986,13 +981,6 @@ jobs:
           Write-Host "Notepad++ installed"
           exit 0
 
-      - name: Install Docker Desktop
-        if: ${{ inputs.install_docker == true }}
-        continue-on-error: true
-        run: |
-          winget install --id Docker.DockerDesktop --silent --accept-package-agreements --accept-source-agreements
-          Write-Host "Docker Desktop installed"
-          exit 0
 
       - name: Install WinRAR
         if: ${{ inputs.install_winrar == true }}
