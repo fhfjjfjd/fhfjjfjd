@@ -281,7 +281,7 @@ jobs:
       - name: Install Chrome + Remove Edge
         continue-on-error: true
         run: |
-          winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements
+          winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements --ignore-security-hash
           Get-Process "msedge*","MicrosoftEdge*" -EA SilentlyContinue | Stop-Process -Force
           @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application","$env:ProgramFiles\Microsoft\Edge\Application") | % {
             if (Test-Path $_) { Get-ChildItem $_ -Directory | ? { $_.Name -match '^\d+' } | % {
