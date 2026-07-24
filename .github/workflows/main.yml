@@ -93,8 +93,8 @@ jobs:
           $cc = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
           Write-Host "`n=== DISK CLEANUP === C: ${cc} GB free | Runner: $env:RUNNER_NAME"
 
-      - parallel:
-          if: ${{ inputs.skip_disk_cleanup != true }}
+      - if: ${{ inputs.skip_disk_cleanup != true }}
+        parallel:
           - name: Delete bloatware
             run: |
               $paths = @(
