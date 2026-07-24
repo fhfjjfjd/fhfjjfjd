@@ -2,60 +2,6 @@ name: RDP
 
 on:
   workflow_dispatch:
-    inputs:
-      username:
-        description: 'RDP Username'
-        required: false
-        default: 'RDP'
-      install_languages:
-        description: 'Languages: nodejs,python,java,dotnet (comma-separated)'
-        required: false
-        default: 'nodejs,python,java,dotnet'
-      install_git:
-        description: 'Install Git'
-        type: boolean
-        default: true
-      install_7zip:
-        description: 'Install 7-Zip'
-        type: boolean
-        default: true
-      install_notepadpp:
-        description: 'Install Notepad++'
-        type: boolean
-        default: true
-      install_winrar:
-        description: 'Install WinRAR'
-        type: boolean
-        default: true
-      install_vlc:
-        description: 'Install VLC'
-        type: boolean
-        default: true
-      install_file_transfer:
-        description: 'Install FileZilla + WinSCP'
-        type: boolean
-        default: true
-      install_chrome:
-        description: 'Install Chrome + Uninstall Edge'
-        type: boolean
-        default: true
-      install_wsl:
-        description: 'Install WSL2 + Ubuntu'
-        type: boolean
-        default: true
-      install_directx:
-        description: 'Install DirectX + VC++ Redist'
-        type: boolean
-        default: true
-      install_store:
-        description: 'Install Microsoft Store'
-        type: choice
-        default: 'winget-bootstrap'
-        options:
-          - 'off'
-          - 'reregister'
-          - 'manual-cdn'
-          - 'winget-bootstrap'
 
 concurrency:
   group: rdp-session
@@ -86,10 +32,8 @@ jobs:
           $ramBefore = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB,1)
           Write-Host "`n=== PERFORMANCE OPTIMIZATION ===`n  RAM Before: ${ramBefore} GB"
 
-          # Power plan
           powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
 
-          # Disable Windows Defender
           @("Set-MpPreference -DisableRealtimeMonitoring $true",
             "Set-MpPreference -DisableArchiveScanning $true",
             "Set-MpPreference -DisableBehaviorMonitoring $true",
@@ -100,17 +44,14 @@ jobs:
             "Set-MpPreference -SubmitSamplesConsent 2") | % { try { Invoke-Expression $_ } catch {} }
           @("WinDefend","WdNisSvc") | % { Set-Service $_ -StartupType Disabled -EA SilentlyContinue; Stop-Service $_ -Force -EA SilentlyContinue }
 
-          # Disable 39 unnecessary services
           "DiagTrack,SysMain,WSearch,TabletInputService,MapsBroker,lfsvc,RetailDemo,WMPNetworkSvc,wisvc,WerSvc,wercplsupport,Fax,XblAuthManager,XblGameSave,XboxGipSvc,XboxNetApiSvc,WbioSrvc,TrkWks,dmwappushservice,PhoneSvc,SEMgrSvc,SCardSvr,ScDeviceEnum,SCPolicySvc,SharedAccess,stisvc,WPDBusEnum,WlanSvc,icssvc,NcbService,Spooler,PrintNotify,TimeBrokerSvc,TokenBroker,CDPSvc,CDPUserSvc,PcaSvc,DPS,WdiServiceHost,WdiSystemHost".Split(',') | % {
             Set-Service $_ -StartupType Disabled -EA SilentlyContinue; Stop-Service $_ -Force -EA SilentlyContinue
           }
 
-          # Kill background processes
           "SearchIndexer,SearchHost,SearchApp,MsMpEng,NisSrv,OneDrive,OneDriveSetup,CompatTelRunner,DeviceCensus,backgroundTaskHost,RuntimeBroker,YourPhone,GameBar,GameBarPresenceWriter,Microsoft.Photos,SkypeApp,SkypeBackgroundHost,HxTsr,HxOutlook,HxCalendarAppImm".Split(',') | % {
             Get-Process $_ -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue
           }
 
-          # Registry optimizations
           @(
             @("HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects","VisualFXSetting",2),
             @("HKCU:\Software\Microsoft\GameBar","AutoGameModeEnabled",0),
@@ -126,7 +67,6 @@ jobs:
             @("HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search","AllowCortana",0)
           ) | % { New-ItemProperty -Path $_[0] -Name $_[1] -Value $_[2] -PropertyType DWord -Force -EA SilentlyContinue }
 
-          # Pagefile optimization
           $ram = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
           $init = [math]::Round($ram/1MB*1.5,0); $max = [math]::Round($ram/1MB*3,0)
           Get-CimInstance Win32_ComputerSystem | Set-CimInstance -Property @{AutomaticManagedPagefile=$false} -EA SilentlyContinue
@@ -145,13 +85,11 @@ jobs:
           $db = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
           Write-Host "`n=== DISK CLEANUP ===  Free Before: ${db} GB"
 
-          # Temp files
           "$env:TEMP\*","C:\Users\runneradmin\AppData\Local\Temp\*","C:\Windows\Temp\*","C:\Windows\Prefetch\*",
           "C:\Windows\SoftwareDistribution\Download\*","C:\Windows\Logs\*","C:\Windows\Panther\*","C:\Windows\inf\*.log","C:\Windows\debug\*" | % {
             Remove-Item $_ -Recurse -Force -EA SilentlyContinue
           }
 
-          # GitHub runner bloat (35 folders)
           "C:\ProgramData\Package Cache","C:\Modules","C:\imagegeneration","C:\hostedtoolcache\CodeQL","C:\hostedtoolcache\go",
           "C:\hostedtoolcache\Ruby","C:\hostedtoolcache\Java_Temurin-Hotspot_jdk","C:\hostedtoolcache\PyPy","C:\hostedtoolcache\node",
           "C:\Strawberry","C:\SeleniumWebDrivers","C:\ghcup","C:\mingw64","C:\msys64","C:\tools\php","C:\tools\zstd","C:\tools\kotlinc",
@@ -163,7 +101,6 @@ jobs:
             if (Test-Path $_) { Remove-Item $_ -Recurse -Force -EA SilentlyContinue }
           }
 
-          # Remove Appx bloatware
           "Microsoft.BingWeather","Microsoft.BingNews","Microsoft.GetHelp","Microsoft.Getstarted",
           "Microsoft.MicrosoftOfficeHub","Microsoft.MicrosoftSolitaireCollection","Microsoft.People","Microsoft.SkypeApp",
           "Microsoft.Xbox*","Microsoft.YourPhone","Microsoft.ZuneMusic","Microsoft.ZuneVideo",
@@ -174,11 +111,9 @@ jobs:
             Get-AppxPackage -AllUsers $_ -EA SilentlyContinue | Remove-AppxPackage -AllUsers -EA SilentlyContinue
           }
 
-          # Windows component cleanup
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null
           Dism.exe /online /Cleanup-Image /SPSuperseded 2>$null
 
-          # Clear caches
           "C:\Windows\Installer\$PatchCache$","C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache",
           "C:\ProgramData\Microsoft\Windows\WER","C:\ProgramData\USOShared\Logs",
           "C:\Users\runneradmin\AppData\Local\CrashDumps","C:\Users\runneradmin\AppData\Local\Microsoft\Windows\INetCache",
@@ -215,12 +150,10 @@ jobs:
 
       - name: Configure Graphics Environment
         run: |
-          # OpenGL (Mesa3D llvmpipe)
           @("MESA_GL_VERSION_OVERRIDE=4.6","MESA_GLSL_VERSION_OVERRIDE=460","GALLIUM_DRIVER=llvmpipe","LIBGL_ALWAYS_SOFTWARE=1") | % {
             $k,$v = $_ -split '='; [System.Environment]::SetEnvironmentVariable($k,$v,"Machine")
           }
 
-          # DirectX / WARP
           New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\DirectX" -Name "ForceWARP" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
           New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "HwSchMode" -Value 2 -PropertyType DWord -Force -EA SilentlyContinue
 
@@ -231,7 +164,6 @@ jobs:
           $ts = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
           New-Item $ts -Force -EA SilentlyContinue
 
-          # BetterRDP core settings (Upinel)
           @(
             @("fEnableVirtualizedGraphics",1),@("fEnableRemoteFXAdvancedRemoteApp",1),
             @("AVC444ModePreferred",1),@("AVCHardwareEncodePreferred",1),
@@ -241,7 +173,6 @@ jobs:
             @("DWMFRAMEINTERVAL",15),@("SelectTransport",0)
           ) | % { New-ItemProperty -Path $ts -Name $_[0] -Value $_[1] -PropertyType DWord -Force -EA SilentlyContinue }
 
-          # Multimedia scheduling
           $mm = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
           New-ItemProperty -Path $mm -Name "NetworkThrottlingIndex" -Value 0xffffffff -PropertyType DWord -Force -EA SilentlyContinue
           New-ItemProperty -Path $mm -Name "SystemResponsiveness" -Value 0 -PropertyType DWord -Force -EA SilentlyContinue
@@ -251,18 +182,15 @@ jobs:
           New-ItemProperty -Path $tp -Name "Priority" -Value 6 -PropertyType DWord -Force -EA SilentlyContinue
           New-ItemProperty -Path $tp -Name "Scheduling Category" -Value "High" -PropertyType String -Force -EA SilentlyContinue
 
-          # Network optimization
           $nw = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
           New-ItemProperty -Path $nw -Name "DisableBandwidthThrottling" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
           New-ItemProperty -Path $nw -Name "DisableLargeMtu" -Value 0 -PropertyType DWord -Force -EA SilentlyContinue
 
-          # TCP low latency
           $tcp = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
           New-ItemProperty -Path $tcp -Name "TcpNoDelay" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
           New-ItemProperty -Path $tcp -Name "TcpAckFrequency" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
           New-ItemProperty -Path $tcp -Name "TCPQuickAck" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
 
-          # Visual effects - best performance
           New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -PropertyType DWord -Force -EA SilentlyContinue
           New-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)) -PropertyType Binary -Force -EA SilentlyContinue
 
@@ -298,19 +226,16 @@ jobs:
           $real = $gpus | ? { $_.Name -match "NVIDIA|AMD|Radeon|GeForce|RTX|GTX|Intel.*(Arc|Iris|UHD)" }
           if ($real) { Write-Host "Real GPU: $($real.Name)" } else { Write-Host "Virtual GPU — software rendering" }
 
-          # Display 4K@60fps
           $tp = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
           @(
             @("ColorDepth",5),@("MaxMonitors",4),@("MaxXResolution",3840),@("MaxYResolution",2160)
           ) | % { New-ItemProperty -Path $tp -Name $_[0] -Value $_[1] -PropertyType DWord -Force -EA SilentlyContinue }
 
-          # DWM
           Set-Service UxSms -StartupType Automatic -EA SilentlyContinue; Start-Service UxSms -EA SilentlyContinue
           New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "TdrLevel" -Value 0 -PropertyType DWord -Force -EA SilentlyContinue
           Write-Host "Display: 4K@60fps + DWM enabled"
 
       - name: Install WSL2
-        if: ${{ inputs.install_wsl }}
         continue-on-error: true
         run: |
           try { wsl --status 2>&1 | Out-Null } catch { wsl --install --no-launch }
@@ -319,7 +244,6 @@ jobs:
           Write-Host "WSL2 installed"
 
       - name: Install Chrome + Remove Edge
-        if: ${{ inputs.install_chrome }}
         continue-on-error: true
         run: |
           winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements
@@ -341,10 +265,9 @@ jobs:
           Write-Host "Chrome installed, Edge removed"
 
       - name: Install Programming Languages
-        if: ${{ inputs.install_languages != '' }}
         continue-on-error: true
         run: |
-          $l = "${{ inputs.install_languages }}".ToLower().Split(',') | % { $_.Trim() }
+          $l = "nodejs,python,java,dotnet".Split(',') | % { $_.Trim() }
           Write-Host "Installing: $($l -join ', ')"
           $pkgs = @{
             "nodejs" = "OpenJS.NodeJS.LTS"
@@ -361,58 +284,35 @@ jobs:
 
       - name: Install Software
         run: |
-          $apps = @()
-          if ("${{ inputs.install_git }}" -eq "true") { $apps += @("Git.Git","Git.Git") }
-          if ("${{ inputs.install_7zip }}" -eq "true") { $apps += @("7zip.7zip") }
-          if ("${{ inputs.install_notepadpp }}" -eq "true") { $apps += @("Notepad++.Notepad++") }
-          if ("${{ inputs.install_winrar }}" -eq "true") { $apps += @("RARLab.WinRAR") }
-          if ("${{ inputs.install_directx }}" -eq "true") { $apps += @("Microsoft.DirectX","Microsoft.VCRedist.2015+.x64") }
-          if ("${{ inputs.install_vlc }}" -eq "true") { $apps += @("VideoLAN.VLC") }
-          if ("${{ inputs.install_file_transfer }}" -eq "true") { $apps += @("TimKosse.FileZilla.Client","WinSCP.WinSCP") }
+          $apps = @("Git.Git","7zip.7zip","Notepad++.Notepad++","RARLab.WinRAR",
+            "Microsoft.DirectX","Microsoft.VCRedist.2015+.x64",
+            "VideoLAN.VLC","TimKosse.FileZilla.Client","WinSCP.WinSCP")
           $apps | % { winget install --id $_ --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null }
           Write-Host "Software installed: $($apps.Count) packages"
 
       - name: Install Microsoft Store
-        if: ${{ inputs.install_store != 'off' }}
         continue-on-error: true
         run: |
-          $m = "${{ inputs.install_store }}"
-          Write-Host "=== Microsoft Store ($m) ==="
+          Write-Host "=== Microsoft Store (winget-bootstrap) ==="
           reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v "RemoveWindowsStore" /f 2>$null
           reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v "DisableStoreApps" /f 2>$null
 
-          if ($m -eq "reregister") {
-            Start-Process wsreset.exe "-i" -Wait -EA SilentlyContinue; Start-Sleep 30
-            Get-AppXPackage *WindowsStore* -AllUsers | % { Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml" -EA SilentlyContinue }
-          }
-          elseif ($m -eq "winget-bootstrap") {
-            $d = "$env:TEMP\wb"; New-Item $d -ItemType Directory -Force | Out-Null
-            try {
-              $r = Invoke-RestMethod 'https://api.github.com/repos/microsoft/winget-cli/releases/latest'
-              $b = "https://github.com/microsoft/winget-cli/releases/download/$($r.tag_name)"
-              Invoke-WebRequest "$b/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "$d\bundle.msixbundle" -UseBasicParsing
-              $lic = $r.assets | ? { $_.name -like '*License*.xml' } | select -First 1
-              if ($lic) { Invoke-WebRequest $lic.browser_download_url -OutFile "$d\License.xml" -UseBasicParsing }
-              Invoke-WebRequest "$b/DesktopAppInstaller_Dependencies.zip" -OutFile "$d\deps.zip" -UseBasicParsing
-              Add-Type -AssemblyName System.IO.Compression.FileSystem
-              [IO.Compression.ZipFile]::ExtractToDirectory("$d\deps.zip","$d\deps")
-              $deps = Get-ChildItem "$d\deps\x64" -Filter *.appx | % { $_.FullName }
-              $deps | % { Add-AppxPackage $_ -ForceApplicationShutdown -EA SilentlyContinue }
-              Add-AppxProvisionedPackage -Online -PackagePath "$d\bundle.msixbundle" -LicensePath "$d\License.xml" -DependencyPackagePath $deps -EA SilentlyContinue
-              Add-AppxPackage "$d\bundle.msixbundle" -ForceApplicationShutdown -EA SilentlyContinue
-            } catch { Write-Host "Failed: $($_.Exception.Message)" }
-            Remove-Item $d -Recurse -Force -EA SilentlyContinue
-          }
-          elseif ($m -eq "manual-cdn") {
-            $d = "$env:TEMP\sm"; New-Item $d -ItemType Directory -Force | Out-Null
-            try { Invoke-WebRequest "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx" -OutFile "$d\VCLibs.appx" -UseBasicParsing; Add-AppxPackage "$d\VCLibs.appx" -EA SilentlyContinue } catch {}
-            @("Microsoft.NET.Native.Framework.2.2","Microsoft.NET.Native.Runtime.2.2","Microsoft.VCLibs.140.00","Microsoft.UI.Xaml.2.8") | % {
-              Get-AppxPackage -AllUsers $_ 2>$null | % { Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml" -EA SilentlyContinue }
-            }
-            DISM /Online /Add-Capability /CapabilityName:App.StoreInstall~~~~0.0.1.0 2>$null
-            Start-Process wsreset.exe "-i" -Wait -EA SilentlyContinue; Start-Sleep 30
-            Remove-Item $d -Recurse -Force -EA SilentlyContinue
-          }
+          $d = "$env:TEMP\wb"; New-Item $d -ItemType Directory -Force | Out-Null
+          try {
+            $r = Invoke-RestMethod 'https://api.github.com/repos/microsoft/winget-cli/releases/latest'
+            $b = "https://github.com/microsoft/winget-cli/releases/download/$($r.tag_name)"
+            Invoke-WebRequest "$b/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "$d\bundle.msixbundle" -UseBasicParsing
+            $lic = $r.assets | ? { $_.name -like '*License*.xml' } | select -First 1
+            if ($lic) { Invoke-WebRequest $lic.browser_download_url -OutFile "$d\License.xml" -UseBasicParsing }
+            Invoke-WebRequest "$b/DesktopAppInstaller_Dependencies.zip" -OutFile "$d\deps.zip" -UseBasicParsing
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [IO.Compression.ZipFile]::ExtractToDirectory("$d\deps.zip","$d\deps")
+            $deps = Get-ChildItem "$d\deps\x64" -Filter *.appx | % { $_.FullName }
+            $deps | % { Add-AppxPackage $_ -ForceApplicationShutdown -EA SilentlyContinue }
+            Add-AppxProvisionedPackage -Online -PackagePath "$d\bundle.msixbundle" -LicensePath "$d\License.xml" -DependencyPackagePath $deps -EA SilentlyContinue
+            Add-AppxPackage "$d\bundle.msixbundle" -ForceApplicationShutdown -EA SilentlyContinue
+          } catch { Write-Host "Failed: $($_.Exception.Message)" }
+          Remove-Item $d -Recurse -Force -EA SilentlyContinue
 
           @("InstallService","ClipSVC","LicenseManager") | % { Set-Service $_ -StartupType Automatic -EA SilentlyContinue; Start-Service $_ -EA SilentlyContinue }
           $sc = Get-AppxPackage -AllUsers Microsoft.WindowsStore -EA SilentlyContinue
@@ -420,7 +320,7 @@ jobs:
 
       - name: Create RDP User
         run: |
-          $u = "${{ inputs.username }}"
+          $u = "RDP"
           $chars = [char[]](65..90) | Get-Random -Count 5
           $chars += [char[]](97..122) | Get-Random -Count 5
           $chars += [char[]](48..57) | Get-Random -Count 3
