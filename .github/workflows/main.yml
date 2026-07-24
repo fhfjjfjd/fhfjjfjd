@@ -379,11 +379,8 @@ jobs:
           $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
           if (-not (Test-Path $ts)) {
             Write-Host "Downloading Tailscale..."
-            $r = Invoke-RestMethod 'https://api.github.com/repos/tailscale/tailscale/releases/latest'
-            $a = $r.assets | ? { $_.name -like '*windows*amd64*.msi' } | select -First 1
-            if (-not $a) { $a = $r.assets | ? { $_.name -like '*.msi' } | select -First 1 }
             $dl = "$env:TEMP\tailscale.msi"
-            Invoke-WebRequest $a.browser_download_url -OutFile $dl -UseBasicParsing
+            Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $dl -UseBasicParsing
             Start-Process msiexec.exe -ArgumentList "/i `"$dl`" /quiet /norestart" -Wait -EA SilentlyContinue
             Remove-Item $dl -Force -EA SilentlyContinue
           }
