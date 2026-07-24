@@ -386,10 +386,14 @@ jobs:
             $dl = "$env:TEMP\tailscale.msi"
             try {
               Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $dl -UseBasicParsing
-              Start-Process msiexec.exe -ArgumentList "/i `"$dl`" /quiet /norestart" -Wait -EA SilentlyContinue
+              $p = Start-Process msiexec.exe -ArgumentList "/i `"$dl`" /quiet /norestart" -Wait -PassThru
               Remove-Item $dl -Force -EA SilentlyContinue
+              if ($p.ExitCode -ne 0) { throw "MSI failed" }
             } catch {
-              Write-Host "Direct download failed, trying winget..."
+              Write-Host "Direct download failed: $_"
+            }
+            if (-not (Test-Path $ts)) {
+              Write-Host "Trying winget..."
               winget install -e --id Tailscale.Tailscale --silent --accept-package-agreements --accept-source-agreements 2>$null
             }
           }
