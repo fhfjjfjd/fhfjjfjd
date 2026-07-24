@@ -82,50 +82,101 @@ jobs:
 
       - name: Free Disk Space (Aggressive)
         run: |
-          $db = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
-          Write-Host "`n=== DISK CLEANUP ===  Free Before: ${db} GB"
+          $sw = [diagnostics.stopwatch]::StartNew()
+          $dc = Get-CimInstance Win32_LogicalDisk | ? { $_.DeviceID -eq 'D:' }
+          $cc = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
+          Write-Host "`n=== DISK CLEANUP ==="
+          Write-Host "  C: ${cc} GB free"
+          if ($dc) { Write-Host "  D: $([math]::Round($dc.FreeSpace/1GB,1)) GB free" } else { Write-Host "  D: NOT AVAILABLE" }
+          Write-Host "  Runner: $env:RUNNER_NAME"
 
-          "$env:TEMP\*","C:\Users\runneradmin\AppData\Local\Temp\*","C:\Windows\Temp\*","C:\Windows\Prefetch\*",
-          "C:\Windows\SoftwareDistribution\Download\*","C:\Windows\Logs\*","C:\Windows\Panther\*","C:\Windows\inf\*.log","C:\Windows\debug\*" | % {
+          # ===== PHASE 1: Parallel delete (biggest bloat first) =====
+          $bigPaths = @(
+            # Visual Studio (~8GB)
+            "C:\Program Files\Microsoft Visual Studio",
+            "C:\Program Files (x86)\Microsoft Visual Studio",
+            # Android SDK (~7GB)
+            "C:\Android",
+            "C:\Users\runneradmin\AppData\Local\Android",
+            # GitHub runner bloat
+            "C:\Modules","C:\imagegeneration","C:\hostedtoolcache",
+            "C:\ProgramData\Package Cache","C:\ProgramData\Chocolatey",
+            # Dev toolchains
+            "C:\Strawberry","C:\SeleniumWebDrivers","C:\ghcup",
+            "C:\mingw64","C:\msys64","C:\tools",
+            # Language caches
+            "C:\Users\runneradmin\.cargo","C:\Users\runneradmin\.rustup",
+            "C:\Users\runneradmin\.dotnet","C:\Users\runneradmin\.nuget",
+            "C:\Users\runneradmin\.gradle","C:\Users\runneradmin\.m2",
+            "C:\Users\runneradmin\.conda",
+            "C:\Users\runneradmin\AppData\Local\pip",
+            "C:\Users\runneradmin\AppData\Local\NuGet",
+            # Database & cloud
+            "C:\Program Files\MongoDB","C:\Program Files\MySQL","C:\Program Files\PostgreSQL",
+            "C:\Program Files\LLVM","C:\Program Files\dotnet\sdk",
+            "C:\Program Files (x86)\Microsoft SDKs\Azure",
+            # Temp/logs
+            "$env:TEMP","C:\Windows\Temp","C:\Windows\Prefetch",
+            "C:\Windows\SoftwareDistribution\Download",
+            "C:\Windows\Logs","C:\Windows\Panther","C:\Windows\debug",
+            "C:\ProgramData\Microsoft\Windows\WER","C:\ProgramData\USOShared\Logs",
+            "C:\Users\runneradmin\AppData\Local\Temp",
+            "C:\Users\runneradmin\AppData\Local\CrashDumps",
+            "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\INetCache",
+            "C:\Windows\Installer\$PatchCache$",
+            "C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache",
+            # Thumbnail cache
+            "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Explorer"
+          )
+          Write-Host "`n  Phase 1: Parallel delete..."
+          $bigPaths | ForEach-Object -Parallel -ThrottleLimit 8 {
             Remove-Item $_ -Recurse -Force -EA SilentlyContinue
           }
+          Write-Host "  Phase 1 done"
 
-          "C:\ProgramData\Package Cache","C:\Modules","C:\imagegeneration","C:\hostedtoolcache\CodeQL","C:\hostedtoolcache\go",
-          "C:\hostedtoolcache\Ruby","C:\hostedtoolcache\Java_Temurin-Hotspot_jdk","C:\hostedtoolcache\PyPy","C:\hostedtoolcache\node",
-          "C:\Strawberry","C:\SeleniumWebDrivers","C:\ghcup","C:\mingw64","C:\msys64","C:\tools\php","C:\tools\zstd","C:\tools\kotlinc",
-          "C:\Program Files\dotnet\sdk\*preview*","C:\Program Files\MongoDB","C:\Program Files\MySQL","C:\Program Files\PostgreSQL",
-          "C:\Program Files\LLVM","C:\Program Files (x86)\Microsoft SDKs\Azure","C:\Program Files (x86)\Microsoft Visual Studio\Installer",
-          "C:\ProgramData\Chocolatey","C:\Users\runneradmin\.cargo","C:\Users\runneradmin\.rustup","C:\Users\runneradmin\.dotnet",
-          "C:\Users\runneradmin\.nuget","C:\Users\runneradmin\.gradle","C:\Users\runneradmin\.m2","C:\Users\runneradmin\.conda",
-          "C:\Users\runneradmin\AppData\Local\pip\cache","C:\Users\runneradmin\AppData\Local\NuGet\v3-cache" | % {
-            if (Test-Path $_) { Remove-Item $_ -Recurse -Force -EA SilentlyContinue }
+          # ===== PHASE 2: CleanMgr via registry automation =====
+          Write-Host "  Phase 2: CleanMgr..."
+          $cmKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches"
+          $cmState = 64
+          @("Active Setup Temp Folders","Downloaded Program Files","Internet Cache Files",
+            "Memory Dump Files","Old ChkDsk Files","Previous Installations","Recycle Bin",
+            "Setup Log Files","System error memory dump files","System error minidump files",
+            "Temporary Files","Temporary Setup Files","Upgrade Discarded Files",
+            "Windows Error Reporting Archive Files","Windows Error Reporting Queue Files",
+            "Windows Error Reporting System Archive Files","Windows Error Reporting System Queue Files",
+            "Windows Upgrade Log Files") | % {
+            New-ItemProperty -Path "$cmKey\$_" -Name "StateFlags0064" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
           }
+          Start-Process cleanmgr -ArgumentList "/sagerun:64" -Wait -EA SilentlyContinue
+          Write-Host "  Phase 2 done"
 
-          "Microsoft.BingWeather","Microsoft.BingNews","Microsoft.GetHelp","Microsoft.Getstarted",
-          "Microsoft.MicrosoftOfficeHub","Microsoft.MicrosoftSolitaireCollection","Microsoft.People","Microsoft.SkypeApp",
-          "Microsoft.Xbox*","Microsoft.YourPhone","Microsoft.ZuneMusic","Microsoft.ZuneVideo",
-          "Microsoft.MixedReality.Portal","Microsoft.Messaging","Microsoft.OneConnect","Microsoft.Print3D",
-          "Microsoft.3DBuilder","Microsoft.WindowsFeedbackHub","Microsoft.WindowsMaps","Microsoft.WindowsCamera",
-          "Microsoft.WindowsAlarms","Microsoft.Todos","Clipchamp.Clipchamp","Microsoft.PowerAutomateDesktop",
-          "MicrosoftTeams","Microsoft.549981C3F5F10" | % {
-            Get-AppxPackage -AllUsers $_ -EA SilentlyContinue | Remove-AppxPackage -AllUsers -EA SilentlyContinue
-          }
-
+          # ===== PHASE 3: DISM component cleanup =====
+          Write-Host "  Phase 3: DISM..."
           Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null
           Dism.exe /online /Cleanup-Image /SPSuperseded 2>$null
+          Write-Host "  Phase 3 done"
 
-          "C:\Windows\Installer\$PatchCache$","C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache",
-          "C:\ProgramData\Microsoft\Windows\WER","C:\ProgramData\USOShared\Logs",
-          "C:\Users\runneradmin\AppData\Local\CrashDumps","C:\Users\runneradmin\AppData\Local\Microsoft\Windows\INetCache",
-          "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Explorer\thumbcache_*" | % {
-            Remove-Item $_ -Recurse -Force -EA SilentlyContinue
+          # ===== PHASE 4: Remove Appx bloatware =====
+          Write-Host "  Phase 4: Appx bloatware..."
+          @("Microsoft.BingWeather","Microsoft.BingNews","Microsoft.GetHelp","Microsoft.Getstarted",
+            "Microsoft.MicrosoftOfficeHub","Microsoft.MicrosoftSolitaireCollection","Microsoft.People",
+            "Microsoft.SkypeApp","Microsoft.Xbox*","Microsoft.YourPhone","Microsoft.ZuneMusic",
+            "Microsoft.ZuneVideo","Microsoft.MixedReality.Portal","Microsoft.Messaging",
+            "Microsoft.OneConnect","Microsoft.Print3D","Microsoft.3DBuilder","Microsoft.WindowsFeedbackHub",
+            "Microsoft.WindowsMaps","Microsoft.WindowsCamera","Microsoft.WindowsAlarms","Microsoft.Todos",
+            "Clipchamp.Clipchamp","Microsoft.PowerAutomateDesktop","MicrosoftTeams",
+            "Microsoft.549981C3F5F10") | % {
+            Get-AppxPackage -AllUsers $_ -EA SilentlyContinue | Remove-AppxPackage -AllUsers -EA SilentlyContinue
           }
+          Write-Host "  Phase 4 done"
 
+          # ===== PHASE 5: System tweaks =====
+          Write-Host "  Phase 5: System tweaks..."
           powercfg /h off
           compact /CompactOS:always 2>$null
 
           $da = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
-          Write-Host "`n  Free After: ${da} GB (+$([math]::Round($da-$db,1)) GB recovered)"
+          Write-Host "`n=== RESULT ===  Freed: $([math]::Round($da-$cc,1)) GB | Total: ${da} GB | Time: $([math]::Round($sw.Elapsed.TotalMinutes,1)) min"
 
       - name: Install 7-Zip (required for Mesa3D)
         run: |
