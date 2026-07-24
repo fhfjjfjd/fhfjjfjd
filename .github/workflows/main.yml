@@ -197,14 +197,29 @@ jobs:
         with:
           deployment-choice: '1'
 
-      - name: Configure Mesa3D Environment
+      - name: Install Vulkan Runtime + SwiftShader
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          install_runtime_only: true
+          install_swiftshader: true
+          install_lavapipe: true
+          cache: true
+
+      - name: Configure Graphics Environment
         run: |
+          # OpenGL (Mesa3D llvmpipe)
           @("MESA_GL_VERSION_OVERRIDE=4.6","MESA_GLSL_VERSION_OVERRIDE=460","GALLIUM_DRIVER=llvmpipe","LIBGL_ALWAYS_SOFTWARE=1") | % {
             $k,$v = $_ -split '='; [System.Environment]::SetEnvironmentVariable($k,$v,"Machine")
           }
+
+          # Vulkan (Lavapipe + SwiftShader)
+          [System.Environment]::SetEnvironmentVariable("VK_ICD_FILENAMES","C:\Lavapipe\share\vulkan\icd.d\lvp_icd.x86_64.json;C:\Swiftshader\vk_swiftshader_icd.json","Machine")
+
+          # DirectX / WARP
           reg add "HKLM\SOFTWARE\Microsoft\DirectX" /v "ForceWARP" /t REG_DWORD /d 1 /f
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v "HwSchMode" /t REG_DWORD /d 2 /f
-          Write-Host "Mesa3D configured: OpenGL 4.6 + llvmpipe"
+
+          Write-Host "Graphics: OpenGL 4.6 (llvmpipe) + Vulkan (Lavapipe + SwiftShader)"
 
       - name: RDP Optimization (BetterRDP)
         run: |
