@@ -2,6 +2,12 @@ name: RDP
 
 on:
   workflow_dispatch:
+    inputs:
+      skip_disk_cleanup:
+        description: 'Skip Free Disk Space (Aggressive)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: rdp-session
@@ -81,6 +87,7 @@ jobs:
           Write-Host "`n  RAM After: ${ramAfter} GB (+$([math]::Round($ramAfter-$ramBefore,1)) GB freed)"
 
       - name: Free Disk Space (Aggressive)
+        if: ${{ inputs.skip_disk_cleanup != true }}
         run: |
           $sw = [diagnostics.stopwatch]::StartNew()
           $cc = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
@@ -378,40 +385,54 @@ jobs:
           echo "RDP_PASS=$pass" >> $env:GITHUB_ENV
           Write-Host "User '$u' created"
 
-      - name: Fix Winget & Install Tailscale
+      - name: Install & Connect Tailscale
         run: |
-          # Repair winget first
-          Install-PackageProvider -Name NuGet -Force | Out-Null
-          Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery | Out-Null
-          Repair-WinGetPackageManager -Force -Latest
+          # Ensure required services are running (MSI needs them)
+          sc.exe config NlaSvc start= demand 2>$null
+          sc.exe config netprofm start= demand 2>$null
+          Start-Service NlaSvc -EA SilentlyContinue
+          Start-Service netprofm -EA SilentlyContinue
+          Start-Service plugplay -EA SilentlyContinue
 
-          winget install --id Tailscale.Tailscale --source winget --silent --accept-package-agreements --accept-source-agreements
+          # Download MSI directly (bypass winget)
+          Write-Host "Downloading Tailscale..."
+          $msi = "$env:TEMP\tailscale.msi"
+          $log = "$env:TEMP\tailscale-install.log"
+          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi -UseBasicParsing
 
+          # Install with verbose logging
+          Write-Host "Installing Tailscale..."
+          $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /quiet /norestart /L*v `"$log`"" -Wait -PassThru
+          Write-Host "MSI exit code: $($p.ExitCode)"
+          Remove-Item $msi -Force -EA SilentlyContinue
+
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
+            Write-Host "MSI install failed, checking log..."
+            if (Test-Path $log) { Get-Content $log -Tail 50 }
+            exit 1
+          }
+
+          # Wait for tailscale.exe
+          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
           for ($i = 0; $i -lt 30; $i++) {
-              if (Test-Path "$env:ProgramFiles\Tailscale\tailscale.exe") { break }
+              if (Test-Path $ts) { break }
               Start-Sleep -Seconds 2
           }
-          if (-not (Test-Path "$env:ProgramFiles\Tailscale\tailscale.exe")) { Write-Error "Tailscale not found"; exit 1 }
+          if (-not (Test-Path $ts)) { Write-Error "Tailscale not found"; exit 1 }
 
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
+          # Connect
+          & $ts up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
 
+          # Get IP
           $tsIP = $null
           for ($i = 0; $i -lt 20; $i++) {
-              $tsIP = (& "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4 2>$null) | Select-Object -First 1
+              $tsIP = (& $ts ip -4 2>$null) | Select-Object -First 1
               if ($tsIP) { break }
               Start-Sleep -Seconds 3
           }
           if (-not $tsIP) { Write-Error "No Tailscale IP"; exit 1 }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
           Write-Host "Connected: $tsIP"
-          for ($i=0; $i -lt 30; $i++) { if (Test-Path $ts) { break }; Start-Sleep 2 }
-          if (-not (Test-Path $ts)) { Write-Error "Tailscale not found"; exit 1 }
-          & $ts up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
-          $ip = $null
-          for ($i=0; $i -lt 20; $i++) { $ip = (& $ts ip -4 2>$null) | select -First 1; if ($ip) { break }; Start-Sleep 3 }
-          if (-not $ip) { Write-Error "No Tailscale IP"; exit 1 }
-          echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
-          Write-Host "Connected: $ip"
 
       - name: Verify RDP
         run: |
