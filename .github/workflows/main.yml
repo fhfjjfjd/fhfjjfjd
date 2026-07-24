@@ -206,28 +206,45 @@ jobs:
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v "HwSchMode" /t REG_DWORD /d 2 /f
           Write-Host "Mesa3D configured: OpenGL 4.6 + llvmpipe"
 
-      - name: Video Optimization
+      - name: RDP Optimization (BetterRDP)
         run: |
           $ts = "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
-          @("fEnableVirtualizedGraphics 1","AVC444ModePreferred 1","MaxFrameRate 60","ImageQuality 3",
-            "VideoPlaybackPolicy 1","fEnableVideoPlaybackOptimization 1","UseHardwareGpuScheduler 1","bEnumerateHWBeforeSW 0") | % {
+
+          # BetterRDP core settings (Upinel)
+          @("fEnableVirtualizedGraphics 1","fEnableRemoteFXAdvancedRemoteApp 1",
+            "AVC444ModePreferred 1","AVCHardwareEncodePreferred 1",
+            "MaxCompressionLevel 2","VisualExperiencePolicy 1","GraphicsProfile 2",
+            "bEnumerateHWBeforeSW 1","ImageQuality 3",
+            "VGOptimization_CaptureFrameRate 60","VGOptimization_CompressionRatio 2",
+            "DWMFRAMEINTERVAL 15","SelectTransport 0") | % {
             $p=$_ -split ' '; reg add $ts /v $p[0] /t REG_DWORD /d $p[1] /f
           }
-          reg add "HKLM\SOFTWARE\Microsoft\Windows Media Foundation" /v "EnableFrameServerMode" /t REG_DWORD /d 1 /f
 
+          # Multimedia scheduling
           $mm = "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
           reg add $mm /v "NetworkThrottlingIndex" /t REG_DWORD /d 0xffffffff /f
           reg add $mm /v "SystemResponsiveness" /t REG_DWORD /d 0 /f
-          $tp = "$mm\Tasks\Playback"
-          @("Priority 6","Scheduling Category High","SFIO Priority High","GPU Priority 8") | % {
+          $tp = "$mm\Tasks\Game"
+          @("SFIO Priority High","Priority 6","Scheduling Category 2") | % {
             $p=$_ -split ' '; $t = if($p[1] -match '^\d+$'){'REG_DWORD'}else{'REG_SZ'}; reg add $tp /v $p[0] /t $t /d $p[1] /f
           }
 
+          # Network optimization
           $nw = "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
           reg add $nw /v "DisableBandwidthThrottling" /t REG_DWORD /d 1 /f
+          reg add $nw /v "DisableLargeMtu" /t REG_DWORD /d 0 /f
 
-          winget install --id CodecGuide.K-LiteCodecPack.Full --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
-          Write-Host "Video: 60fps AVC444 + K-Lite codecs"
+          # TCP low latency
+          $tcp = "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
+          reg add $tcp /v "TcpNoDelay" /t REG_DWORD /d 1 /f
+          reg add $tcp /v "TcpAckFrequency" /t REG_DWORD /d 1 /f
+          reg add $tcp /v "TCPQuickAck" /t REG_DWORD /d 1 /f
+
+          # Visual effects - best performance
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v "VisualFXSetting" /t REG_DWORD /d 2 /f
+          reg add "HKCU\Control Panel\Desktop" /v "UserPreferencesMask" /t REG_BINARY /d 9012038010000000 /f
+
+          Write-Host "RDP: BetterRDP + 60fps + AVC444 + low latency"
 
       - name: Configure RDP
         run: |
@@ -254,24 +271,22 @@ jobs:
           @("Audiosrv","AudioEndpointBuilder") | % { Set-Service $_ -StartupType Automatic -EA SilentlyContinue; Start-Service $_ -EA SilentlyContinue }
           Write-Host "Audio enabled"
 
-      - name: Detect GPU & Optimize Display
+      - name: Detect GPU & Display Config
         run: |
-          $tp = "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
           $gpus = Get-CimInstance Win32_VideoController
           $real = $gpus | ? { $_.Name -match "NVIDIA|AMD|Radeon|GeForce|RTX|GTX|Intel.*(Arc|Iris|UHD)" }
-          if ($real) {
-            Write-Host "Real GPU: $($real.Name)"
-            @("AVCHardwareEncodePreferred 1","bEnumerateHWBeforeSW 1","fEnableWddmDriver 1","GraphicsProfile 2") | % { $p=$_ -split ' '; reg add $tp /v $p[0] /t REG_DWORD /d $p[1] /f }
-          } else {
-            Write-Host "Virtual GPU — software rendering"
-            @("fEnableVirtualizedGraphics 1","AVCHardwareEncodePreferred 0","bEnumerateHWBeforeSW 0","fEnableWddmDriver 1","GraphicsProfile 1") | % { $p=$_ -split ' '; reg add $tp /v $p[0] /t REG_DWORD /d $p[1] /f }
-          }
+          if ($real) { Write-Host "Real GPU: $($real.Name)" } else { Write-Host "Virtual GPU — software rendering" }
+
           # Display 4K@60fps
-          @("ColorDepth 5","MaxMonitors 4","MaxXResolution 3840","MaxYResolution 2160","VisualExperiencePolicy 1","DWMFRAMEINTERVAL 15","MaxFrameRate 60","ImageQuality 3") | % { $p=$_ -split ' '; reg add $tp /v $p[0] /t REG_DWORD /d $p[1] /f }
+          $tp = "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          @("ColorDepth 5","MaxMonitors 4","MaxXResolution 3840","MaxYResolution 2160") | % {
+            $p=$_ -split ' '; reg add $tp /v $p[0] /t REG_DWORD /d $p[1] /f
+          }
+
           # DWM
           Set-Service UxSms -StartupType Automatic -EA SilentlyContinue; Start-Service UxSms -EA SilentlyContinue
-          @("HKLM\SOFTWARE\Microsoft\Windows\DWM EnableHWAcceleration 1","HKLM\SOFTWARE\Microsoft\Windows\DWM Composition 1",
-            "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers TdrLevel 0") | % { $p=$_ -split ' '; reg add $p[0] /v $p[1] /t REG_DWORD /d $p[2] /f }
+          reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v "TdrLevel" /t REG_DWORD /d 0 /f
+          Write-Host "Display: 4K@60fps + DWM enabled"
 
       - name: Install WSL2
         if: ${{ inputs.install_wsl }}
