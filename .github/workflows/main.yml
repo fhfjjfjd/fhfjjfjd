@@ -179,10 +179,14 @@ jobs:
       - name: Install 7-Zip (required for Mesa3D)
         run: |
           if (-not (Get-Command 7z -EA SilentlyContinue)) {
-            Write-Host "Installing 7-Zip..."
-            winget install 7zip.7zip --accept-source-agreements --accept-package-agreements --silent
+            Write-Host "Downloading 7-Zip..."
+            $url = "https://www.7-zip.org/a/7z2409-x64.exe"
+            $dl = "$env:TEMP\7z-installer.exe"
+            Invoke-WebRequest $url -OutFile $dl -UseBasicParsing
+            Start-Process $dl /S -Wait
             $p7z = "$env:ProgramFiles\7-Zip"
             if (Test-Path "$p7z\7z.exe") { Add-Content $env:GITHUB_PATH $p7z }
+            Write-Host "7-Zip installed"
           } else { Write-Host "7-Zip already installed" }
 
       - name: Install Mesa3D (OpenGL)
