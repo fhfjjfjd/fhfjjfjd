@@ -192,6 +192,15 @@ jobs:
           $da = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
           Write-Host "`n  Free After: ${da} GB (+$([math]::Round($da-$db,1)) GB recovered)"
 
+      - name: Install 7-Zip (required for Mesa3D)
+        run: |
+          if (-not (Get-Command 7z -EA SilentlyContinue)) {
+            Write-Host "Installing 7-Zip..."
+            winget install 7zip.7zip --accept-source-agreements --accept-package-agreements -EA SilentlyContinue
+            $p7z = "$env:ProgramFiles\7-Zip"
+            if (Test-Path "$p7z\7z.exe") { Add-Content $env:GITHUB_PATH $p7z }
+          } else { Write-Host "7-Zip already installed" }
+
       - name: Install Mesa3D (OpenGL)
         uses: ssciwr/setup-mesa-dist-win@v3
         with:
