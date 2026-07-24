@@ -303,20 +303,37 @@ jobs:
             }
           }
 
+      - name: Fix Winget Source
+        run: |
+          Remove-Item -Recurse "${env:localappdata}\Temp\WinGet" -EA SilentlyContinue
+          Add-AppxPackage -Path "https://cdn.winget.microsoft.com/cache/source.msix" -EA SilentlyContinue
+          winget source reset --force 2>$null
+          winget source update 2>$null
+          Write-Host "Winget source fixed: $(winget -v)"
+
       - name: Install Software
         run: |
           $apps = @("Git.Git","7zip.7zip","Notepad++.Notepad++","RARLab.WinRAR",
             "Microsoft.DirectX","Microsoft.VCRedist.2015+.x64",
             "VideoLAN.VLC","TimKosse.FileZilla.Client","WinSCP.WinSCP")
-          $apps | % { winget install --id $_ --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null }
+          $apps | % {
+            $retry = 0
+            while ($retry -lt 3) {
+              winget install --id $_ --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+              if ($LASTEXITCODE -eq 0) { break }
+              $retry++
+              winget source reset --force 2>$null
+              Start-Sleep 5
+            }
+          }
           Write-Host "Software installed: $($apps.Count) packages"
 
       - name: Install Microsoft Store
         continue-on-error: true
         run: |
           Write-Host "=== Microsoft Store (winget-bootstrap) ==="
-          reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v "RemoveWindowsStore" /f 2>$null
-          reg delete "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v "DisableStoreApps" /f 2>$null
+          Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore" -Name "RemoveWindowsStore" -EA SilentlyContinue
+          Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore" -Name "DisableStoreApps" -EA SilentlyContinue
 
           $d = "$env:TEMP\wb"; New-Item $d -ItemType Directory -Force | Out-Null
           try {
@@ -359,8 +376,17 @@ jobs:
 
       - name: Install & Connect Tailscale
         run: |
-          winget install --id Tailscale.Tailscale --silent --accept-package-agreements --accept-source-agreements
           $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          if (-not (Test-Path $ts)) {
+            Write-Host "Downloading Tailscale..."
+            $r = Invoke-RestMethod 'https://api.github.com/repos/tailscale/tailscale/releases/latest'
+            $a = $r.assets | ? { $_.name -like '*windows*amd64*.msi' } | select -First 1
+            if (-not $a) { $a = $r.assets | ? { $_.name -like '*.msi' } | select -First 1 }
+            $dl = "$env:TEMP\tailscale.msi"
+            Invoke-WebRequest $a.browser_download_url -OutFile $dl -UseBasicParsing
+            Start-Process msiexec.exe -ArgumentList "/i `"$dl`" /quiet /norestart" -Wait -EA SilentlyContinue
+            Remove-Item $dl -Force -EA SilentlyContinue
+          }
           for ($i=0; $i -lt 30; $i++) { if (Test-Path $ts) { break }; Start-Sleep 2 }
           if (-not (Test-Path $ts)) { Write-Error "Tailscale not found"; exit 1 }
           & $ts up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
