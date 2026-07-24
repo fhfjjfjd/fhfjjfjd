@@ -128,10 +128,8 @@ jobs:
             # Thumbnail cache
             "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Explorer"
           )
-          Write-Host "`n  Phase 1: Parallel delete..."
-          $bigPaths | ForEach-Object -Parallel -ThrottleLimit 8 {
-            Remove-Item $_ -Recurse -Force -EA SilentlyContinue
-          }
+          Write-Host "`n  Phase 1: Delete bloatware..."
+          $bigPaths | % { Remove-Item $_ -Recurse -Force -EA SilentlyContinue }
           Write-Host "  Phase 1 done"
 
           # ===== PHASE 2: CleanMgr via registry automation =====
