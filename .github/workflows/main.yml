@@ -94,6 +94,7 @@ jobs:
           Write-Host "`n=== DISK CLEANUP === C: ${cc} GB free | Runner: $env:RUNNER_NAME"
 
       - parallel:
+          if: ${{ inputs.skip_disk_cleanup != true }}
           - name: Delete bloatware
             run: |
               $paths = @(
