@@ -93,9 +93,9 @@ jobs:
           $cc = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
           Write-Host "`n=== DISK CLEANUP === C: ${cc} GB free | Runner: $env:RUNNER_NAME"
 
-      - if: ${{ inputs.skip_disk_cleanup != true }}
-        parallel:
+      - parallel:
           - name: Delete bloatware
+            if: ${{ inputs.skip_disk_cleanup != true }}
             run: |
               $paths = @(
                 "C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio",
@@ -130,12 +130,14 @@ jobs:
               Write-Host "  Bloatware deleted (del+rmdir method)"
 
           - name: DISM cleanup
+            if: ${{ inputs.skip_disk_cleanup != true }}
             run: |
               Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null
               Dism.exe /online /Cleanup-Image /SPSuperseded 2>$null
               Write-Host "  DISM done"
 
           - name: Remove Appx bloatware
+            if: ${{ inputs.skip_disk_cleanup != true }}
             run: |
               @("Microsoft.BingWeather","Microsoft.BingNews","Microsoft.GetHelp","Microsoft.Getstarted",
                 "Microsoft.MicrosoftOfficeHub","Microsoft.MicrosoftSolitaireCollection","Microsoft.People",
