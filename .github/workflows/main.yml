@@ -176,10 +176,16 @@ jobs:
             Write-Host "7-Zip installed"
           } else { Write-Host "7-Zip already installed" }
 
-      - name: Install Mesa3D (OpenGL)
-        uses: ssciwr/setup-mesa-dist-win@v3
-        with:
-          deployment-choice: '1'
+      - name: Download Mesa3D (per-app ready)
+        run: |
+          $mesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/26.0.3/mesa3d-26.0.3-release-msvc.7z"
+          $archive = "$env:TEMP\mesa.7z"
+          Write-Host "Downloading Mesa3D..."
+          Invoke-WebRequest $mesaUrl -OutFile $archive -UseBasicParsing
+          & "C:\Program Files\7-Zip\7z.exe" x $archive -o"C:\Mesa3D" -y | Out-Null
+          Remove-Item $archive -Force -EA SilentlyContinue
+          Write-Host "Mesa3D ready at C:\Mesa3D"
+          Write-Host "To deploy per-app: run C:\Mesa3D\perappdeploy.cmd as admin"
 
       - name: Install Vulkan Runtime + SwiftShader
         uses: jakoch/install-vulkan-sdk-action@v1
@@ -187,17 +193,6 @@ jobs:
           install_runtime_only: true
           install_swiftshader: true
           cache: true
-
-      - name: Configure Graphics Environment
-        run: |
-          @("MESA_GL_VERSION_OVERRIDE=4.6","MESA_GLSL_VERSION_OVERRIDE=460","GALLIUM_DRIVER=llvmpipe","LIBGL_ALWAYS_SOFTWARE=1") | % {
-            $k,$v = $_ -split '='; [System.Environment]::SetEnvironmentVariable($k,$v,"Machine")
-          }
-
-          New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\DirectX" -Name "ForceWARP" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
-          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "HwSchMode" -Value 2 -PropertyType DWord -Force -EA SilentlyContinue
-
-          Write-Host "Graphics: OpenGL 4.6 (llvmpipe) + Vulkan (Lavapipe + SwiftShader)"
 
       - name: RDP Optimization (BetterRDP)
         run: |
