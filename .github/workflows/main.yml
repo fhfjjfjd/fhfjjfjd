@@ -380,23 +380,22 @@ jobs:
 
       - name: Install & Connect Tailscale
         run: |
-          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          if (-not (Test-Path $ts)) {
-            Write-Host "Downloading Tailscale..."
-            $dl = "$env:TEMP\tailscale.msi"
-            try {
-              Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $dl -UseBasicParsing
-              $p = Start-Process msiexec.exe -ArgumentList "/i `"$dl`" /quiet /norestart" -Wait -PassThru
-              Remove-Item $dl -Force -EA SilentlyContinue
-              if ($p.ExitCode -ne 0) { throw "MSI failed" }
-            } catch {
-              Write-Host "Direct download failed: $_"
-            }
-            if (-not (Test-Path $ts)) {
-              Write-Host "Trying winget..."
-              winget install -e --id Tailscale.Tailscale --silent --accept-package-agreements --accept-source-agreements 2>$null
-            }
+          winget install --id Tailscale.Tailscale --source winget --silent --accept-package-agreements --accept-source-agreements
+          for ($i = 0; $i -lt 30; $i++) {
+              if (Test-Path "$env:ProgramFiles\Tailscale\tailscale.exe") { break }
+              Start-Sleep -Seconds 2
           }
+          if (-not (Test-Path "$env:ProgramFiles\Tailscale\tailscale.exe")) { Write-Error "Tailscale not found"; exit 1 }
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
+          $tsIP = $null
+          for ($i = 0; $i -lt 20; $i++) {
+              $tsIP = (& "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4 2>$null) | Select-Object -First 1
+              if ($tsIP) { break }
+              Start-Sleep -Seconds 3
+          }
+          if (-not $tsIP) { Write-Error "No Tailscale IP"; exit 1 }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+          Write-Host "Connected: $tsIP"
           for ($i=0; $i -lt 30; $i++) { if (Test-Path $ts) { break }; Start-Sleep 2 }
           if (-not (Test-Path $ts)) { Write-Error "Tailscale not found"; exit 1 }
           & $ts up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
