@@ -89,7 +89,7 @@ jobs:
       - parallel:
           - name: Delete bloatware
             run: |
-              @(
+              $paths = @(
                 "C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio",
                 "C:\Android","C:\Users\runneradmin\AppData\Local\Android",
                 "C:\Modules","C:\imagegeneration","C:\hostedtoolcache",
@@ -114,8 +114,12 @@ jobs:
                 "C:\Windows\Installer\$PatchCache$",
                 "C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache",
                 "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Explorer"
-              ) | % { Remove-Item $_ -Recurse -Force -EA SilentlyContinue }
-              Write-Host "  Bloatware deleted"
+              )
+              $del = ($paths | % { "del /f /q /s `"$_\*.*`" >nul 2>&1" }) -join " & "
+              $rmdir = ($paths | % { "rmdir /s /q `"$_`" 2>nul" }) -join " & "
+              cmd /c $del
+              cmd /c $rmdir
+              Write-Host "  Bloatware deleted (del+rmdir method)"
 
           - name: DISM cleanup
             run: |
