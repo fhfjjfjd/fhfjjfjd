@@ -254,10 +254,10 @@ jobs:
           $tsPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server'
           $rdp = "$tsPath\WinStations\RDP-Tcp"
           Set-ItemProperty $tsPath -Name "fDenyTSConnections" -Value 0 -Force
-          @{"UserAuthentication"=0;"SecurityLayer"=0;"fDisableAudioRedirection"=0;"fDisableAudioCapture"=0;
-            "MaxConnectionTime"=0;"MaxDisconnectionTime"=0;"MaxIdleTime"=0;"fDisableClip"=0;"fDisableCdm"=0;"fDisableCpm"=0} | % {
-            Set-ItemProperty $rdp -Name $_.Key -Value $_.Value -Force
-          }
+          @(
+            @("UserAuthentication",0),@("SecurityLayer",0),@("fDisableAudioRedirection",0),@("fDisableAudioCapture",0),
+            @("MaxConnectionTime",0),@("MaxDisconnectionTime",0),@("MaxIdleTime",0),@("fDisableClip",0),@("fDisableCdm",0),@("fDisableCpm",0)
+          ) | % { Set-ItemProperty $rdp -Name $_[0] -Value $_[1] -Force }
           $tp = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
           @(
             @("SelectTransport",1),@("fEnableVirtualizedGraphics",1),@("fEnableRemoteFXAdvancedRemoteApp",0),
