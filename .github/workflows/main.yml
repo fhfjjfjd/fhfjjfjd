@@ -287,7 +287,7 @@ jobs:
         if: ${{ inputs.install_chrome == true }}
         continue-on-error: true
         run: |
-          winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements --ignore-security-hash 2>$null
+          winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements 2>$null
           Write-Host "Chrome installed"
           exit 0
 
