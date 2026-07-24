@@ -378,16 +378,24 @@ jobs:
           echo "RDP_PASS=$pass" >> $env:GITHUB_ENV
           Write-Host "User '$u' created"
 
-      - name: Connect Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
-          tags: tag:rdp
-        env:
-          TS_HOSTNAME: gh-rdp-${{ github.run_id }}
-
-      - name: Get Tailscale IP
+      - name: Fix Winget & Install Tailscale
         run: |
+          # Repair winget first
+          Install-PackageProvider -Name NuGet -Force | Out-Null
+          Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery | Out-Null
+          Repair-WinGetPackageManager -Force -Latest
+
+          winget install --id Tailscale.Tailscale --source winget --silent --accept-package-agreements --accept-source-agreements
+
+          for ($i = 0; $i -lt 30; $i++) {
+              if (Test-Path "$env:ProgramFiles\Tailscale\tailscale.exe") { break }
+              Start-Sleep -Seconds 2
+          }
+          if (-not (Test-Path "$env:ProgramFiles\Tailscale\tailscale.exe")) { Write-Error "Tailscale not found"; exit 1 }
+
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
+
+          $tsIP = $null
           for ($i = 0; $i -lt 20; $i++) {
               $tsIP = (& "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4 2>$null) | Select-Object -First 1
               if ($tsIP) { break }
