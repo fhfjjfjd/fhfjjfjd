@@ -111,20 +111,20 @@ jobs:
           }
 
           # Registry optimizations
-          @("HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects VisualFXSetting 2",
-            "HKCU\Software\Microsoft\GameBar AutoGameModeEnabled 0",
-            "HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR AllowGameDVR 0",
-            "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting Disabled 1",
-            "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management LargeSystemCache 0",
-            "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management DisablePagingExecutive 1",
-            "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management ClearPageFileAtShutdown 0",
-            "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters EnablePrefetcher 0",
-            "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters EnableSuperfetch 0",
-            "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager SubscribedContent-338389Enabled 0",
-            "HKCU\Software\Microsoft\Windows\CurrentVersion\PushNotifications ToastEnabled 0",
-            "HKLM\SOFTWARE\Policies\Microsoft\Windows\Windows Search AllowCortana 0") | % {
-            $p = $_.Split(' '); reg add $p[0] /v $p[1] /t REG_DWORD /d $p[2] /f
-          }
+          @(
+            @("HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects","VisualFXSetting",2),
+            @("HKCU:\Software\Microsoft\GameBar","AutoGameModeEnabled",0),
+            @("HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR","AllowGameDVR",0),
+            @("HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting","Disabled",1),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management","LargeSystemCache",0),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management","DisablePagingExecutive",1),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management","ClearPageFileAtShutdown",0),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters","EnablePrefetcher",0),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters","EnableSuperfetch",0),
+            @("HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager","SubscribedContent-338389Enabled",0),
+            @("HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications","ToastEnabled",0),
+            @("HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search","AllowCortana",0)
+          ) | % { New-ItemProperty -Path $_[0] -Name $_[1] -Value $_[2] -PropertyType DWord -Force -EA SilentlyContinue }
 
           # Pagefile optimization
           $ram = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
@@ -212,48 +212,50 @@ jobs:
           }
 
           # DirectX / WARP
-          reg add "HKLM\SOFTWARE\Microsoft\DirectX" /v "ForceWARP" /t REG_DWORD /d 1 /f
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v "HwSchMode" /t REG_DWORD /d 2 /f
+          New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\DirectX" -Name "ForceWARP" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "HwSchMode" -Value 2 -PropertyType DWord -Force -EA SilentlyContinue
 
           Write-Host "Graphics: OpenGL 4.6 (llvmpipe) + Vulkan (Lavapipe + SwiftShader)"
 
       - name: RDP Optimization (BetterRDP)
         run: |
-          $ts = "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          $ts = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          New-Item $ts -Force -EA SilentlyContinue
 
           # BetterRDP core settings (Upinel)
-          @("fEnableVirtualizedGraphics 1","fEnableRemoteFXAdvancedRemoteApp 1",
-            "AVC444ModePreferred 1","AVCHardwareEncodePreferred 1",
-            "MaxCompressionLevel 2","VisualExperiencePolicy 1","GraphicsProfile 2",
-            "bEnumerateHWBeforeSW 1","ImageQuality 3",
-            "VGOptimization_CaptureFrameRate 60","VGOptimization_CompressionRatio 2",
-            "DWMFRAMEINTERVAL 15","SelectTransport 0") | % {
-            $p=$_ -split ' '; reg add $ts /v $p[0] /t REG_DWORD /d $p[1] /f
-          }
+          @(
+            @("fEnableVirtualizedGraphics",1),@("fEnableRemoteFXAdvancedRemoteApp",1),
+            @("AVC444ModePreferred",1),@("AVCHardwareEncodePreferred",1),
+            @("MaxCompressionLevel",2),@("VisualExperiencePolicy",1),@("GraphicsProfile",2),
+            @("bEnumerateHWBeforeSW",1),@("ImageQuality",3),
+            @("VGOptimization_CaptureFrameRate",60),@("VGOptimization_CompressionRatio",2),
+            @("DWMFRAMEINTERVAL",15),@("SelectTransport",0)
+          ) | % { New-ItemProperty -Path $ts -Name $_[0] -Value $_[1] -PropertyType DWord -Force -EA SilentlyContinue }
 
           # Multimedia scheduling
-          $mm = "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
-          reg add $mm /v "NetworkThrottlingIndex" /t REG_DWORD /d 0xffffffff /f
-          reg add $mm /v "SystemResponsiveness" /t REG_DWORD /d 0 /f
+          $mm = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
+          New-ItemProperty -Path $mm -Name "NetworkThrottlingIndex" -Value 0xffffffff -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $mm -Name "SystemResponsiveness" -Value 0 -PropertyType DWord -Force -EA SilentlyContinue
           $tp = "$mm\Tasks\Game"
-          @("SFIO Priority High","Priority 6","Scheduling Category 2") | % {
-            $p=$_ -split ' '; $t = if($p[1] -match '^\d+$'){'REG_DWORD'}else{'REG_SZ'}; reg add $tp /v $p[0] /t $t /d $p[1] /f
-          }
+          New-Item $tp -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tp -Name "SFIO Priority" -Value "High" -PropertyType String -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tp -Name "Priority" -Value 6 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tp -Name "Scheduling Category" -Value "High" -PropertyType String -Force -EA SilentlyContinue
 
           # Network optimization
-          $nw = "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
-          reg add $nw /v "DisableBandwidthThrottling" /t REG_DWORD /d 1 /f
-          reg add $nw /v "DisableLargeMtu" /t REG_DWORD /d 0 /f
+          $nw = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+          New-ItemProperty -Path $nw -Name "DisableBandwidthThrottling" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $nw -Name "DisableLargeMtu" -Value 0 -PropertyType DWord -Force -EA SilentlyContinue
 
           # TCP low latency
-          $tcp = "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
-          reg add $tcp /v "TcpNoDelay" /t REG_DWORD /d 1 /f
-          reg add $tcp /v "TcpAckFrequency" /t REG_DWORD /d 1 /f
-          reg add $tcp /v "TCPQuickAck" /t REG_DWORD /d 1 /f
+          $tcp = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
+          New-ItemProperty -Path $tcp -Name "TcpNoDelay" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tcp -Name "TcpAckFrequency" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tcp -Name "TCPQuickAck" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
 
           # Visual effects - best performance
-          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v "VisualFXSetting" /t REG_DWORD /d 2 /f
-          reg add "HKCU\Control Panel\Desktop" /v "UserPreferencesMask" /t REG_BINARY /d 9012038010000000 /f
+          New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)) -PropertyType Binary -Force -EA SilentlyContinue
 
           Write-Host "RDP: BetterRDP + 60fps + AVC444 + low latency"
 
@@ -266,12 +268,11 @@ jobs:
             "MaxConnectionTime"=0;"MaxDisconnectionTime"=0;"MaxIdleTime"=0;"fDisableClip"=0;"fDisableCdm"=0;"fDisableCpm"=0} | % {
             Set-ItemProperty $rdp -Name $_.Key -Value $_.Value -Force
           }
-          $tp = "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
-          reg add $tp /v "SelectTransport" /t REG_DWORD /d 1 /f
-          reg add $tp /v "fEnableVirtualizedGraphics" /t REG_DWORD /d 1 /f
-          reg add $tp /v "fEnableRemoteFXAdvancedRemoteApp" /t REG_DWORD /d 0 /f
-          reg add $tp /v "AVC444ModePreferred" /t REG_DWORD /d 1 /f
-          reg add $tp /v "AVCHardwareEncodePreferred" /t REG_DWORD /d 1 /f
+          $tp = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          @(
+            @("SelectTransport",1),@("fEnableVirtualizedGraphics",1),@("fEnableRemoteFXAdvancedRemoteApp",0),
+            @("AVC444ModePreferred",1),@("AVCHardwareEncodePreferred",1)
+          ) | % { New-ItemProperty -Path $tp -Name $_[0] -Value $_[1] -PropertyType DWord -Force -EA SilentlyContinue }
           netsh advfirewall firewall delete rule name="RDP-Tailscale" 2>$null
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
           Restart-Service TermService -Force
@@ -289,14 +290,14 @@ jobs:
           if ($real) { Write-Host "Real GPU: $($real.Name)" } else { Write-Host "Virtual GPU — software rendering" }
 
           # Display 4K@60fps
-          $tp = "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
-          @("ColorDepth 5","MaxMonitors 4","MaxXResolution 3840","MaxYResolution 2160") | % {
-            $p=$_ -split ' '; reg add $tp /v $p[0] /t REG_DWORD /d $p[1] /f
-          }
+          $tp = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          @(
+            @("ColorDepth",5),@("MaxMonitors",4),@("MaxXResolution",3840),@("MaxYResolution",2160)
+          ) | % { New-ItemProperty -Path $tp -Name $_[0] -Value $_[1] -PropertyType DWord -Force -EA SilentlyContinue }
 
           # DWM
           Set-Service UxSms -StartupType Automatic -EA SilentlyContinue; Start-Service UxSms -EA SilentlyContinue
-          reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v "TdrLevel" /t REG_DWORD /d 0 /f
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "TdrLevel" -Value 0 -PropertyType DWord -Force -EA SilentlyContinue
           Write-Host "Display: 4K@60fps + DWM enabled"
 
       - name: Install WSL2
