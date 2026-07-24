@@ -8,6 +8,11 @@ on:
         required: false
         default: false
         type: boolean
+      install_chrome:
+        description: 'Install Google Chrome'
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: rdp-session
@@ -278,10 +283,17 @@ jobs:
           if (-not (wsl -l -q 2>$null | Select-String "Ubuntu")) { wsl --install -d Ubuntu --no-launch 2>$null }
           Write-Host "WSL2 installed"
 
-      - name: Install Chrome + Remove Edge
+      - name: Install Google Chrome
+        if: ${{ inputs.install_chrome == true }}
         continue-on-error: true
         run: |
-          winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements --ignore-security-hash
+          winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements --ignore-security-hash 2>$null
+          Write-Host "Chrome installed"
+          exit 0
+
+      - name: Remove Microsoft Edge
+        continue-on-error: true
+        run: |
           Get-Process "msedge*","MicrosoftEdge*" -EA SilentlyContinue | Stop-Process -Force
           @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application","$env:ProgramFiles\Microsoft\Edge\Application") | % {
             if (Test-Path $_) { Get-ChildItem $_ -Directory | ? { $_.Name -match '^\d+' } | % {
@@ -297,7 +309,8 @@ jobs:
           }
           New-Item "HKLM:\SOFTWARE\Microsoft\EdgeUpdate" -Force | Out-Null
           Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\EdgeUpdate" -Name "DoNotUpdateToEdgeWithChromium" -Value 1 -Type DWord -Force
-          Write-Host "Chrome installed, Edge removed"
+          Write-Host "Edge removed"
+          exit 0
 
       - name: Install Programming Languages
         continue-on-error: true
