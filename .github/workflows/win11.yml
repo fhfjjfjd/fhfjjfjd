@@ -1,0 +1,462 @@
+name: RDP Win11
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_disk_cleanup:
+        description: 'Skip Free Disk Space (Aggressive)'
+        required: false
+        default: false
+        type: boolean
+      install_chrome:
+        description: 'Install Google Chrome'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: rdp-session
+  cancel-in-progress: false
+
+jobs:
+  secure-rdp:
+    runs-on: windows-11
+    timeout-minutes: 356
+    steps:
+      - name: System Info
+        run: |
+          $b = "=" * 55
+          Write-Host "`n$b`n  SYSTEM INFORMATION`n$b"
+          $os = Get-CimInstance Win32_OperatingSystem
+          $cpu = Get-CimInstance Win32_Processor
+          $cs = Get-CimInstance Win32_ComputerSystem
+          $d = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+          Write-Host "  OS     : $($os.Caption) (Build $($os.BuildNumber))"
+          Write-Host "  CPU    : $($cpu.Name) ($($cpu.NumberOfCores)c/$($cpu.NumberOfLogicalProcessors)t)"
+          Write-Host "  RAM    : $([math]::Round($cs.TotalPhysicalMemory/1GB,1)) GB"
+          Write-Host "  Disk   : $([math]::Round($d.FreeSpace/1GB,1)) GB free / $([math]::Round($d.Size/1GB,1)) GB"
+          Get-CimInstance Win32_VideoController | % { Write-Host "  GPU    : $($_.Name)" }
+          Write-Host "  Runner : $env:RUNNER_NAME`n$b"
+
+      - name: Boost Performance & Optimize RAM
+        run: |
+          $ramBefore = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB,1)
+          Write-Host "`n=== PERFORMANCE OPTIMIZATION ===`n  RAM Before: ${ramBefore} GB"
+
+          powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+
+          @("Set-MpPreference -DisableRealtimeMonitoring $true",
+            "Set-MpPreference -DisableArchiveScanning $true",
+            "Set-MpPreference -DisableBehaviorMonitoring $true",
+            "Set-MpPreference -DisableIOAVProtection $true",
+            "Set-MpPreference -DisableScriptScanning $true",
+            "Set-MpPreference -DisableBlockAtFirstSeen $true",
+            "Set-MpPreference -MAPSReporting Disabled",
+            "Set-MpPreference -SubmitSamplesConsent 2") | % { try { Invoke-Expression $_ } catch {} }
+          @("WinDefend","WdNisSvc") | % { Set-Service $_ -StartupType Disabled -EA SilentlyContinue; Stop-Service $_ -Force -EA SilentlyContinue }
+
+          "DiagTrack,SysMain,WSearch,TabletInputService,MapsBroker,lfsvc,RetailDemo,WMPNetworkSvc,wisvc,WerSvc,wercplsupport,Fax,XblAuthManager,XblGameSave,XboxGipSvc,XboxNetApiSvc,WbioSrvc,TrkWks,dmwappushservice,PhoneSvc,SEMgrSvc,SCardSvr,ScDeviceEnum,SCPolicySvc,SharedAccess,stisvc,WPDBusEnum,WlanSvc,icssvc,NcbService,Spooler,PrintNotify,TimeBrokerSvc,TokenBroker,CDPSvc,CDPUserSvc,PcaSvc,DPS,WdiServiceHost,WdiSystemHost".Split(',') | % {
+            Set-Service $_ -StartupType Disabled -EA SilentlyContinue; Stop-Service $_ -Force -EA SilentlyContinue
+          }
+
+          "SearchIndexer,SearchHost,SearchApp,MsMpEng,NisSrv,OneDrive,OneDriveSetup,CompatTelRunner,DeviceCensus,backgroundTaskHost,RuntimeBroker,YourPhone,GameBar,GameBarPresenceWriter,Microsoft.Photos,SkypeApp,SkypeBackgroundHost,HxTsr,HxOutlook,HxCalendarAppImm".Split(',') | % {
+            Get-Process $_ -EA SilentlyContinue | Stop-Process -Force -EA SilentlyContinue
+          }
+
+          @(
+            @("HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects","VisualFXSetting",2),
+            @("HKCU:\Software\Microsoft\GameBar","AutoGameModeEnabled",0),
+            @("HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR","AllowGameDVR",0),
+            @("HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting","Disabled",1),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management","LargeSystemCache",0),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management","DisablePagingExecutive",1),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management","ClearPageFileAtShutdown",0),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters","EnablePrefetcher",0),
+            @("HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters","EnableSuperfetch",0),
+            @("HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager","SubscribedContent-338389Enabled",0),
+            @("HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications","ToastEnabled",0),
+            @("HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search","AllowCortana",0)
+          ) | % { New-ItemProperty -Path $_[0] -Name $_[1] -Value $_[2] -PropertyType DWord -Force -EA SilentlyContinue }
+
+          $ram = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+          $init = [math]::Round($ram/1MB*1.5,0); $max = [math]::Round($ram/1MB*3,0)
+          Get-CimInstance Win32_ComputerSystem | Set-CimInstance -Property @{AutomaticManagedPagefile=$false} -EA SilentlyContinue
+          $pf = Get-CimInstance Win32_PageFileSetting -EA SilentlyContinue
+          if ($pf) { $pf | Set-CimInstance -Property @{InitialSize=$init;MaximumSize=$max} -EA SilentlyContinue }
+          else { New-CimInstance Win32_PageFileSetting -Property @{Name="C:\pagefile.sys";InitialSize=$init;MaximumSize=$max} -EA SilentlyContinue }
+
+          Disable-MMAgent -MemoryCompression -EA SilentlyContinue
+          [System.GC]::Collect(); [System.GC]::WaitForPendingFinalizers()
+
+          $ramAfter = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB,1)
+          Write-Host "`n  RAM After: ${ramAfter} GB (+$([math]::Round($ramAfter-$ramBefore,1)) GB freed)"
+
+      - name: Free Disk Space (Aggressive)
+        if: ${{ inputs.skip_disk_cleanup != true }}
+        run: |
+          $sw = [diagnostics.stopwatch]::StartNew()
+          $cc = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
+          Write-Host "`n=== DISK CLEANUP === C: ${cc} GB free | Runner: $env:RUNNER_NAME"
+
+      - parallel:
+          - name: Delete bloatware
+            if: ${{ inputs.skip_disk_cleanup != true }}
+            run: |
+              $paths = @(
+                "C:\Program Files\Microsoft Visual Studio","C:\Program Files (x86)\Microsoft Visual Studio",
+                "C:\Android","C:\Users\runneradmin\AppData\Local\Android",
+                "C:\Modules","C:\imagegeneration","C:\hostedtoolcache",
+                "C:\ProgramData\Package Cache","C:\ProgramData\Chocolatey",
+                "C:\Strawberry","C:\SeleniumWebDrivers","C:\ghcup",
+                "C:\mingw64","C:\msys64","C:\tools",
+                "C:\Users\runneradmin\.cargo","C:\Users\runneradmin\.rustup",
+                "C:\Users\runneradmin\.dotnet","C:\Users\runneradmin\.nuget",
+                "C:\Users\runneradmin\.gradle","C:\Users\runneradmin\.m2",
+                "C:\Users\runneradmin\.conda","C:\Users\runneradmin\AppData\Local\pip",
+                "C:\Users\runneradmin\AppData\Local\NuGet",
+                "C:\Program Files\MongoDB","C:\Program Files\MySQL","C:\Program Files\PostgreSQL",
+                "C:\Program Files\LLVM","C:\Program Files\dotnet\sdk",
+                "C:\Program Files (x86)\Microsoft SDKs\Azure",
+                "$env:TEMP","C:\Windows\Temp","C:\Windows\Prefetch",
+                "C:\Windows\SoftwareDistribution\Download",
+                "C:\Windows\Logs","C:\Windows\Panther","C:\Windows\debug",
+                "C:\ProgramData\Microsoft\Windows\WER","C:\ProgramData\USOShared\Logs",
+                "C:\Users\runneradmin\AppData\Local\Temp",
+                "C:\Users\runneradmin\AppData\Local\CrashDumps",
+                "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\INetCache",
+                "C:\Windows\Installer\$PatchCache$",
+                "C:\Windows\ServiceProfiles\LocalService\AppData\Local\FontCache",
+                "C:\Users\runneradmin\AppData\Local\Microsoft\Windows\Explorer"
+              )
+              $del = ($paths | % { "del /f /q /s `"$_\*.*`" >nul 2>&1" }) -join " & "
+              $rmdir = ($paths | % { "rmdir /s /q `"$_`" 2>nul" }) -join " & "
+              cmd /c $del
+              cmd /c $rmdir
+              Write-Host "  Bloatware deleted (del+rmdir method)"
+
+          - name: DISM cleanup
+            if: ${{ inputs.skip_disk_cleanup != true }}
+            run: |
+              Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase 2>$null
+              Dism.exe /online /Cleanup-Image /SPSuperseded 2>$null
+              Write-Host "  DISM done"
+
+          - name: Remove Appx bloatware
+            if: ${{ inputs.skip_disk_cleanup != true }}
+            run: |
+              @("Microsoft.BingWeather","Microsoft.BingNews","Microsoft.GetHelp","Microsoft.Getstarted",
+                "Microsoft.MicrosoftOfficeHub","Microsoft.MicrosoftSolitaireCollection","Microsoft.People",
+                "Microsoft.SkypeApp","Microsoft.Xbox*","Microsoft.YourPhone","Microsoft.ZuneMusic",
+                "Microsoft.ZuneVideo","Microsoft.MixedReality.Portal","Microsoft.Messaging",
+                "Microsoft.OneConnect","Microsoft.Print3D","Microsoft.3DBuilder","Microsoft.WindowsFeedbackHub",
+                "Microsoft.WindowsMaps","Microsoft.WindowsCamera","Microsoft.WindowsAlarms","Microsoft.Todos",
+                "Clipchamp.Clipchamp","Microsoft.PowerAutomateDesktop","MicrosoftTeams",
+                "Microsoft.549981C3F5F10") | % {
+                Get-AppxPackage -AllUsers $_ -EA SilentlyContinue | Remove-AppxPackage -AllUsers -EA SilentlyContinue
+              }
+              Write-Host "  Appx removed"
+
+      - name: Disk result
+        run: |
+          powercfg /h off
+          compact /CompactOS:always 2>$null
+          $da = [math]::Round((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace/1GB,1)
+          Write-Host "`n=== RESULT === Free: ${da} GB"
+
+      - name: Install 7-Zip
+        run: |
+          if (-not (Get-Command 7z -EA SilentlyContinue)) {
+            Write-Host "Downloading 7-Zip..."
+            $url = "https://github.com/ip7z/7zip/releases/download/26.02/7z2602-x64.exe"
+            $dl = "$env:TEMP\7z-installer.exe"
+            Invoke-WebRequest $url -OutFile $dl -UseBasicParsing
+            Start-Process $dl /S -Wait
+            $p7z = "$env:ProgramFiles\7-Zip"
+            if (Test-Path "$p7z\7z.exe") { Add-Content $env:GITHUB_PATH $p7z }
+            Write-Host "7-Zip installed"
+          } else { Write-Host "7-Zip already installed" }
+
+      - name: Download Mesa3D (per-app ready)
+        run: |
+          $mesaUrl = "https://github.com/pal1000/mesa-dist-win/releases/download/26.0.3/mesa3d-26.0.3-release-msvc.7z"
+          $archive = "$env:TEMP\mesa.7z"
+          Write-Host "Downloading Mesa3D..."
+          Invoke-WebRequest $mesaUrl -OutFile $archive -UseBasicParsing
+          & "C:\Program Files\7-Zip\7z.exe" x $archive -o"C:\Mesa3D" -y | Out-Null
+          Remove-Item $archive -Force -EA SilentlyContinue
+          Write-Host "Mesa3D ready at C:\Mesa3D"
+          Write-Host "To deploy per-app: run C:\Mesa3D\perappdeploy.cmd as admin"
+
+      - name: Install Vulkan Runtime + SwiftShader
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          install_runtime_only: true
+          install_swiftshader: true
+          cache: true
+
+      - name: RDP Optimization (BetterRDP)
+        run: |
+          $ts = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          New-Item $ts -Force -EA SilentlyContinue
+
+          @(
+            @("fEnableVirtualizedGraphics",1),@("fEnableRemoteFXAdvancedRemoteApp",1),
+            @("AVC444ModePreferred",1),@("AVCHardwareEncodePreferred",1),
+            @("MaxCompressionLevel",2),@("VisualExperiencePolicy",1),@("GraphicsProfile",2),
+            @("bEnumerateHWBeforeSW",1),@("ImageQuality",3),
+            @("VGOptimization_CaptureFrameRate",60),@("VGOptimization_CompressionRatio",2),
+            @("DWMFRAMEINTERVAL",15),@("SelectTransport",0)
+          ) | % { New-ItemProperty -Path $ts -Name $_[0] -Value $_[1] -PropertyType DWord -Force -EA SilentlyContinue }
+
+          $mm = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
+          New-ItemProperty -Path $mm -Name "NetworkThrottlingIndex" -Value 0xffffffff -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $mm -Name "SystemResponsiveness" -Value 0 -PropertyType DWord -Force -EA SilentlyContinue
+          $tp = "$mm\Tasks\Game"
+          New-Item $tp -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tp -Name "SFIO Priority" -Value "High" -PropertyType String -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tp -Name "Priority" -Value 6 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tp -Name "Scheduling Category" -Value "High" -PropertyType String -Force -EA SilentlyContinue
+
+          $nw = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+          New-ItemProperty -Path $nw -Name "DisableBandwidthThrottling" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $nw -Name "DisableLargeMtu" -Value 0 -PropertyType DWord -Force -EA SilentlyContinue
+
+          $tcp = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
+          New-ItemProperty -Path $tcp -Name "TcpNoDelay" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tcp -Name "TcpAckFrequency" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path $tcp -Name "TCPQuickAck" -Value 1 -PropertyType DWord -Force -EA SilentlyContinue
+
+          New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -PropertyType DWord -Force -EA SilentlyContinue
+          New-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)) -PropertyType Binary -Force -EA SilentlyContinue
+
+          Write-Host "RDP: BetterRDP + 60fps + AVC444 + low latency"
+
+      - name: Configure RDP
+        run: |
+          $tsPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server'
+          $rdp = "$tsPath\WinStations\RDP-Tcp"
+          Set-ItemProperty $tsPath -Name "fDenyTSConnections" -Value 0 -Force
+          @(
+            @("UserAuthentication",0),@("SecurityLayer",0),@("fDisableAudioRedirection",0),@("fDisableAudioCapture",0),
+            @("MaxConnectionTime",0),@("MaxDisconnectionTime",0),@("MaxIdleTime",0),@("fDisableClip",0),@("fDisableCdm",0),@("fDisableCpm",0)
+          ) | % { Set-ItemProperty $rdp -Name $_[0] -Value $_[1] -Force }
+          $tp = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          @(
+            @("SelectTransport",1),@("fEnableVirtualizedGraphics",1),@("fEnableRemoteFXAdvancedRemoteApp",0),
+            @("AVC444ModePreferred",1),@("AVCHardwareEncodePreferred",1)
+          ) | % { New-ItemProperty -Path $tp -Name $_[0] -Value $_[1] -PropertyType DWord -Force -EA SilentlyContinue }
+          netsh advfirewall firewall delete rule name="RDP-Tailscale" 2>$null
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service TermService -Force
+          Write-Host "RDP configured"
+
+      - name: Enable Audio
+        run: |
+          @("Audiosrv","AudioEndpointBuilder") | % { Set-Service $_ -StartupType Automatic -EA SilentlyContinue; Start-Service $_ -EA SilentlyContinue }
+          Write-Host "Audio enabled"
+
+      - name: Detect GPU & Display Config
+        run: |
+          $gpus = Get-CimInstance Win32_VideoController
+          $real = $gpus | ? { $_.Name -match "NVIDIA|AMD|Radeon|GeForce|RTX|GTX|Intel.*(Arc|Iris|UHD)" }
+          if ($real) { Write-Host "Real GPU: $($real.Name)" } else { Write-Host "Virtual GPU — software rendering" }
+
+          $tp = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          @(
+            @("ColorDepth",5),@("MaxMonitors",4),@("MaxXResolution",3840),@("MaxYResolution",2160)
+          ) | % { New-ItemProperty -Path $tp -Name $_[0] -Value $_[1] -PropertyType DWord -Force -EA SilentlyContinue }
+
+          Set-Service UxSms -StartupType Automatic -EA SilentlyContinue; Start-Service UxSms -EA SilentlyContinue
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "TdrLevel" -Value 0 -PropertyType DWord -Force -EA SilentlyContinue
+          Write-Host "Display: 4K@60fps + DWM enabled"
+
+      - name: Install WSL2
+        continue-on-error: true
+        run: |
+          try { wsl --status 2>&1 | Out-Null } catch { wsl --install --no-launch }
+          wsl --update; wsl --set-default-version 2
+          if (-not (wsl -l -q 2>$null | Select-String "Ubuntu")) { wsl --install -d Ubuntu --no-launch 2>$null }
+          Write-Host "WSL2 installed"
+
+      - name: Install Google Chrome
+        if: ${{ inputs.install_chrome == true }}
+        continue-on-error: true
+        run: |
+          winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements 2>$null
+          Write-Host "Chrome installed"
+          exit 0
+
+      - name: Remove Microsoft Edge
+        continue-on-error: true
+        run: |
+          Get-Process "msedge*","MicrosoftEdge*" -EA SilentlyContinue | Stop-Process -Force
+          @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application","$env:ProgramFiles\Microsoft\Edge\Application") | % {
+            if (Test-Path $_) { Get-ChildItem $_ -Directory | ? { $_.Name -match '^\d+' } | % {
+              $s = Join-Path $_.FullName "Installer\setup.exe"
+              if (Test-Path $s) { Start-Process $s "--uninstall --system-level --force-uninstall" -Wait -EA SilentlyContinue }
+            }}
+          }
+          @("${env:ProgramFiles(x86)}\Microsoft\Edge","$env:ProgramFiles\Microsoft\Edge","${env:ProgramFiles(x86)}\Microsoft\EdgeUpdate","$env:LOCALAPPDATA\Microsoft\Edge") | % {
+            if (Test-Path $_) { Remove-Item $_ -Recurse -Force -EA SilentlyContinue }
+          }
+          @("$env:PUBLIC\Desktop\Microsoft Edge.lnk","$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\Microsoft Edge.lnk","C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Microsoft Edge.lnk") | % {
+            Remove-Item $_ -Force -EA SilentlyContinue
+          }
+          New-Item "HKLM:\SOFTWARE\Microsoft\EdgeUpdate" -Force | Out-Null
+          Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\EdgeUpdate" -Name "DoNotUpdateToEdgeWithChromium" -Value 1 -Type DWord -Force
+          Write-Host "Edge removed"
+          exit 0
+
+      - name: Install Programming Languages
+        continue-on-error: true
+        run: |
+          $l = "nodejs,python,java,dotnet".Split(',') | % { $_.Trim() }
+          Write-Host "Installing: $($l -join ', ')"
+          $pkgs = @{
+            "nodejs" = "OpenJS.NodeJS.LTS"
+            "python" = "Python.Python.3.13"
+            "java"   = "Oracle.JDK.21"
+            "dotnet" = @("Microsoft.DotNet.Runtime.8","Microsoft.DotNet.DesktopRuntime.8")
+          }
+          foreach ($k in $l) {
+            if ($pkgs.ContainsKey($k)) {
+              $ids = $pkgs[$k]; if ($ids -isnot [array]) { $ids = @($ids) }
+              $ids | % { winget install --id $_ --silent --accept-package-agreements --accept-source-agreements 2>$null; Write-Host "  $k installed" }
+            }
+          }
+
+      - name: Fix Winget Source
+        run: |
+          Remove-Item -Recurse "${env:localappdata}\Temp\WinGet" -EA SilentlyContinue
+          Add-AppxPackage -Path "https://cdn.winget.microsoft.com/cache/source.msix" -EA SilentlyContinue
+          winget source reset --force 2>$null
+          winget source update 2>$null
+          Write-Host "Winget source fixed: $(winget -v)"
+
+      - name: Install Software
+        run: |
+          $apps = @("Git.Git","7zip.7zip","Notepad++.Notepad++","RARLab.WinRAR",
+            "Microsoft.DirectX","Microsoft.VCRedist.2015+.x64",
+            "VideoLAN.VLC","TimKosse.FileZilla.Client","WinSCP.WinSCP")
+          $apps | % {
+            $retry = 0
+            while ($retry -lt 3) {
+              winget install --id $_ --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+              if ($LASTEXITCODE -eq 0) { break }
+              $retry++
+              winget source reset --force 2>$null
+              Start-Sleep 5
+            }
+          }
+          Write-Host "Software installed: $($apps.Count) packages"
+
+      - name: Install Microsoft Store
+        continue-on-error: true
+        run: |
+          Write-Host "=== Microsoft Store (winget-bootstrap) ==="
+          Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore" -Name "RemoveWindowsStore" -EA SilentlyContinue
+          Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore" -Name "DisableStoreApps" -EA SilentlyContinue
+
+          $d = "$env:TEMP\wb"; New-Item $d -ItemType Directory -Force | Out-Null
+          try {
+            $r = Invoke-RestMethod 'https://api.github.com/repos/microsoft/winget-cli/releases/latest'
+            $b = "https://github.com/microsoft/winget-cli/releases/download/$($r.tag_name)"
+            Invoke-WebRequest "$b/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "$d\bundle.msixbundle" -UseBasicParsing
+            $lic = $r.assets | ? { $_.name -like '*License*.xml' } | select -First 1
+            if ($lic) { Invoke-WebRequest $lic.browser_download_url -OutFile "$d\License.xml" -UseBasicParsing }
+            Invoke-WebRequest "$b/DesktopAppInstaller_Dependencies.zip" -OutFile "$d\deps.zip" -UseBasicParsing
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [IO.Compression.ZipFile]::ExtractToDirectory("$d\deps.zip","$d\deps")
+            $deps = Get-ChildItem "$d\deps\x64" -Filter *.appx | % { $_.FullName }
+            $deps | % { Add-AppxPackage $_ -ForceApplicationShutdown -EA SilentlyContinue }
+            Add-AppxProvisionedPackage -Online -PackagePath "$d\bundle.msixbundle" -LicensePath "$d\License.xml" -DependencyPackagePath $deps -EA SilentlyContinue
+            Add-AppxPackage "$d\bundle.msixbundle" -ForceApplicationShutdown -EA SilentlyContinue
+          } catch { Write-Host "Failed: $($_.Exception.Message)" }
+          Remove-Item $d -Recurse -Force -EA SilentlyContinue
+
+          @("InstallService","ClipSVC","LicenseManager") | % { Set-Service $_ -StartupType Automatic -EA SilentlyContinue; Start-Service $_ -EA SilentlyContinue }
+          $sc = Get-AppxPackage -AllUsers Microsoft.WindowsStore -EA SilentlyContinue
+          if ($sc) { Write-Host "Store ready: v$($sc.Version)" } else { Write-Host "Store may need restart" }
+
+      - name: Create RDP User
+        run: |
+          $u = "RDP"
+          $chars = [char[]](65..90) | Get-Random -Count 5
+          $chars += [char[]](97..122) | Get-Random -Count 5
+          $chars += [char[]](48..57) | Get-Random -Count 3
+          $chars += ([char[]](33..47)+[char[]](58..64)+[char[]](91..96)+[char[]](123..126)) | Get-Random -Count 3
+          $pass = -join ($chars | Sort-Object { Get-Random })
+          $sec = ConvertTo-SecureString $pass -AsPlainText -Force
+          $ex = Get-LocalUser -Name $u -EA SilentlyContinue
+          if ($ex) { Set-LocalUser -Name $u -Password $sec } else { New-LocalUser -Name $u -Password $sec -PasswordNeverExpires -AccountNeverExpires }
+          @("Administrators","Remote Desktop Users") | % {
+            if (-not (Get-LocalGroupMember $_ -EA SilentlyContinue | ? { $_.Name -like "*\$u" })) { Add-LocalGroupMember $_ -Member $u }
+          }
+          echo "RDP_USER=$u" >> $env:GITHUB_ENV
+          echo "RDP_PASS=$pass" >> $env:GITHUB_ENV
+          Write-Host "User '$u' created"
+
+      - name: Install & Connect Tailscale
+        run: |
+          sc.exe config NlaSvc start= demand 2>$null
+          sc.exe config netprofm start= demand 2>$null
+          Start-Service NlaSvc -EA SilentlyContinue
+          Start-Service netprofm -EA SilentlyContinue
+          Start-Service plugplay -EA SilentlyContinue
+
+          Write-Host "Downloading Tailscale..."
+          $msi = "$env:TEMP\tailscale.msi"
+          $log = "$env:TEMP\tailscale-install.log"
+          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi -UseBasicParsing
+
+          Write-Host "Installing Tailscale..."
+          $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /quiet /norestart /L*v `"$log`"" -Wait -PassThru
+          Write-Host "MSI exit code: $($p.ExitCode)"
+          Remove-Item $msi -Force -EA SilentlyContinue
+
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
+            Write-Host "MSI failed, trying winget..."
+            winget install --id Tailscale.Tailscale --source winget --silent --accept-package-agreements --accept-source-agreements 2>$null
+          }
+
+          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          for ($i = 0; $i -lt 30; $i++) {
+              if (Test-Path $ts) { break }
+              Start-Sleep -Seconds 2
+          }
+          if (-not (Test-Path $ts)) { Write-Error "Tailscale not found"; exit 1 }
+
+          & $ts up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-win11-${{ github.run_id }}
+
+          $tsIP = $null
+          for ($i = 0; $i -lt 20; $i++) {
+              $tsIP = (& $ts ip -4 2>$null) | Select-Object -First 1
+              if ($tsIP) { break }
+              Start-Sleep -Seconds 3
+          }
+          if (-not $tsIP) { Write-Error "No Tailscale IP"; exit 1 }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+          Write-Host "Connected: $tsIP"
+
+      - name: Verify RDP
+        run: |
+          if (-not (Test-NetConnection $env:TAILSCALE_IP -Port 3389 -WA SilentlyContinue).TcpTestSucceeded) {
+            Write-Error "RDP port 3389 not reachable"; exit 1
+          }
+          Write-Host "RDP verified: $($env:TAILSCALE_IP):3389"
+
+      - name: Connection Info & Keep Alive
+        run: |
+          $b = "=" * 55
+          Write-Host "`n$b`n  RDP WIN11 CONNECTION DETAILS`n$b"
+          Write-Host "  Address  : $env:TAILSCALE_IP"
+          Write-Host "  Username : $env:RDP_USER"
+          Write-Host "  Password : $env:RDP_PASS`n$b"
+          Write-Host "  Mesa3D   : C:\Mesa3D (run perappdeploy.cmd for per-app)`n$b"
+          Write-Host "  Timeout  : ~60 hours`n$b`n"
+          $start = Get-Date
+          while ($true) {
+            $e = [math]::Round(((Get-Date)-$start).TotalMinutes,0)
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Uptime: $([math]::Floor($e/60))h$($e%60)m | Remaining: ~$(3600-$e)m"
+            Start-Sleep 300
+          }
