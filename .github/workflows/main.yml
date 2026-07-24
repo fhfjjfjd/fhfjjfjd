@@ -131,7 +131,7 @@ jobs:
         run: |
           if (-not (Get-Command 7z -EA SilentlyContinue)) {
             Write-Host "Installing 7-Zip..."
-            winget install 7zip.7zip --accept-source-agreements --accept-package-agreements -EA SilentlyContinue
+            winget install 7zip.7zip --accept-source-agreements --accept-package-agreements --silent
             $p7z = "$env:ProgramFiles\7-Zip"
             if (Test-Path "$p7z\7z.exe") { Add-Content $env:GITHUB_PATH $p7z }
           } else { Write-Host "7-Zip already installed" }
