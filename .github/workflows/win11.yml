@@ -8,11 +8,6 @@ on:
         required: false
         default: false
         type: boolean
-      install_chrome:
-        description: 'Install Google Chrome'
-        required: false
-        default: true
-        type: boolean
       install_vulkan:
         description: 'Install Vulkan Runtime + SwiftShader'
         required: false
@@ -285,7 +280,6 @@ jobs:
           Write-Host "WSL2 installed"
 
       - name: Install Google Chrome
-        if: ${{ inputs.install_chrome == true }}
         continue-on-error: true
         run: |
           winget install --id Google.Chrome --silent --accept-package-agreements --accept-source-agreements 2>$null
