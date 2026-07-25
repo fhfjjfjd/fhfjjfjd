@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   secure-rdp:
-    runs-on: windows-11
+    runs-on: windows-11-arm
     timeout-minutes: 356
     steps:
       - name: System Info
@@ -407,7 +407,7 @@ jobs:
           Write-Host "Downloading Tailscale..."
           $msi = "$env:TEMP\tailscale.msi"
           $log = "$env:TEMP\tailscale-install.log"
-          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi -UseBasicParsing
+          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-arm64.msi" -OutFile $msi -UseBasicParsing
 
           Write-Host "Installing Tailscale..."
           $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /quiet /norestart /L*v `"$log`"" -Wait -PassThru
